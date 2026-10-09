@@ -1,0 +1,5 @@
+const V='ombor-v5',A=['./','./index.html','./manifest.webmanifest','./icon-192.png','./icon-512.png'];
+self.addEventListener('install',e=>{e.waitUntil(caches.open(V).then(c=>c.addAll(A)));self.skipWaiting()});
+self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(k=>Promise.all(k.filter(x=>x!=V).map(x=>caches.delete(x)))));self.clients.claim()});
+/* /api/ so'rovlari HECH QACHON keshlanmaydi: ma'lumot faqat serverdan, har bir foydalanuvchiga o'zinikini. */
+self.addEventListener('fetch',e=>{if(e.request.method!='GET'||new URL(e.request.url).pathname.startsWith('/api/'))return;e.respondWith(fetch(e.request).then(r=>{if((new URL(e.request.url).origin==location.origin||e.request.url.includes('jsdelivr'))){const c=r.clone();caches.open(V).then(x=>x.put(e.request,c))}return r}).catch(()=>caches.match(e.request).then(r=>r||caches.match('./index.html'))))});
