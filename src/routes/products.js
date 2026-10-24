@@ -2,18 +2,18 @@ const express = require('express');
 const { db } = require('../db');
 const { adminOnly } = require('../auth');
 const { ApiError, h, num, str, idOf, now } = require('../util');
-
+ 
 const r = express.Router();
 const UNITS = ['m', 'dona', 'kg'];
 const sp = (p) => p.cost * (1 + p.pct / 100);
-
+ 
 // Sotuvchiga tannarx (cost) va foiz (pct) umuman yuborilmaydi
 const view = (p, admin) => ({
   id: p.id, name: p.name, unit: p.unit, qty: p.qty, min: p.min, width: p.width,
   barcode: p.barcode || '', sellPrice: Math.round(sp(p)),
   ...(admin ? { cost: p.cost, pct: p.pct } : {}),
 });
-
+ 
 const parse = (b, partial) => {
   const o = {
     name: str(b.name, { req: true, max: 150 }),
@@ -31,14 +31,14 @@ const parse = (b, partial) => {
   }
   return o;
 };
-
+ 
 const dupBarcode = async (shopId, barcode, exceptId) => {
   if (!barcode) return;
   const q = db('products').where({ shop_id: shopId, barcode });
   if (exceptId) q.whereNot({ id: exceptId });
   if (await q.first()) throw new ApiError(409, 'Bu shtrix-kod bilan mahsulot bor');
 };
-
+ 
 r.get('/', h(async (req, res) => {
   const q = db('products').where({ shop_id: req.user.shopId }).orderBy('name');
   if (req.query.barcode) q.where({ barcode: String(req.query.barcode) });
@@ -46,7 +46,7 @@ r.get('/', h(async (req, res) => {
   const admin = req.user.role === 'admin';
   res.json((await q).map((p) => view(p, admin)));
 }));
-
+ 
 r.post('/', adminOnly, h(async (req, res) => {
   const o = parse(req.body, false);
   await dupBarcode(req.user.shopId, o.barcode);
@@ -57,20 +57,32 @@ r.post('/', adminOnly, h(async (req, res) => {
   });
   res.status(201).json(view(p, true));
 }));
-
+ 
 r.put('/:id', adminOnly, h(async (req, res) => {
   const old = await db('products').where({ id: +req.params.id, shop_id: req.user.shopId }).first();
   if (!old) throw new ApiError(404, 'Mahsulot topilmadi');
   const o = parse(req.body, true);
   await dupBarcode(req.user.shopId, o.barcode, old.id);
+  // Forma ochilgan paytdagi qoldiq (qtyBase) yuborilsa, faqat FARQ qo'llanadi: shu orada sotilgan tovar qaytib ketmaydi.
+  const base = req.body.qtyBase === undefined ? undefined : num(req.body.qtyBase, { min: 0 });
+  const delta = base === undefined ? null : o.qty - base;
   const p = await db.transaction(async (trx) => {
-    await trx('products').where({ id: old.id, shop_id: req.user.shopId }).update(o);
-    if (o.qty > old.qty) await trx('buys').insert({ shop_id: req.user.shopId, name: o.name, amount: (o.qty - old.qty) * o.cost, created_at: now() });
-    return trx('products').where({ id: old.id }).first();
+    const upd = { ...o };
+    if (delta !== null) delete upd.qty;
+    const q = trx('products').where({ id: old.id, shop_id: req.user.shopId });
+    if (delta !== null) {
+      q.andWhere('qty', '>=', -delta); // qoldiq manfiy bo'lib qolmasin
+      upd.qty = trx.raw('qty + ?', [delta]);
+    }
+    if (!(await q.update(upd))) throw new ApiError(409, "Qoldiq shu orada o'zgargan. Sahifani yangilab qayta urining");
+    const cur = await trx('products').where({ id: old.id }).first();
+    const added = delta !== null ? delta : o.qty - old.qty;
+    if (added > 0) await trx('buys').insert({ shop_id: req.user.shopId, name: o.name, amount: added * o.cost, created_at: now() });
+    return cur;
   });
   res.json(view(p, true));
 }));
-
+ 
 // Ombor to'ldirish: yangi tannarx va qo'shiladigan miqdor
 r.post('/:id/restock', adminOnly, h(async (req, res) => {
   const qty = num(req.body.qty, { min: 0.0001 }), cost = num(req.body.cost, { min: 0.0001 });
@@ -85,12 +97,12 @@ r.post('/:id/restock', adminOnly, h(async (req, res) => {
   });
   res.json(view(p, true));
 }));
-
+ 
 r.delete('/:id', adminOnly, h(async (req, res) => {
   const n = await db('products').where({ id: +req.params.id, shop_id: req.user.shopId }).del();
   if (!n) throw new ApiError(404, 'Mahsulot topilmadi');
   res.json({ ok: true });
 }));
-
+ 
 module.exports = r;
 module.exports.sp = sp;
