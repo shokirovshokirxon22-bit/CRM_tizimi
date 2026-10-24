@@ -4,8 +4,8 @@ const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ombor-'));
 process.env.SQLITE_FILE = path.join(tmp, 't.db');
 process.env.JWT_SECRET = 'test-secret';
 process.env.SUPER_KEY = 'super-test';
-process.env.AUTH_RATE_LIMIT = '1000';
-delete process.env.DATABASE_URL;
+process.env.AUTH_RATE_LIMIT = '1000'; process.env.SMS_RATE_LIMIT = '1000'; process.env.SMS_PROVIDER = 'memory';
+if (process.env.TEST_DATABASE_URL) process.env.DATABASE_URL = process.env.TEST_DATABASE_URL; else delete process.env.DATABASE_URL;
 
 const { createApp } = require('../src/app');
 const { migrate, db } = require('../src/db');
@@ -16,6 +16,15 @@ const call = async (method, url, token, body, extra = {}) => {
   let j = null; try { j = await r.json(); } catch {}
   return { s: r.status, j };
 };
+// Ro'yxatdan o'tish endi SMS kod bilan: kod xotiradagi "outbox"dan olinadi (SMS_PROVIDER=memory)
+const { outbox } = require('../src/sms');
+const lastCode = (phone) => { const m = [...outbox].reverse().find((x) => x.phone === phone); return m && m.text.match(/\d{6}/)[0]; };
+const reg = async (shopName, phone, password) => {
+  const ph = phone.replace(/\D/g, '');
+  const s = await call('POST', '/api/auth/register/start', null, { phone });
+  if (s.s !== 200) return s;
+  return call('POST', '/api/auth/register', null, { shopName, phone, password, code: lastCode(ph) });
+};
 const ok = (name, cond) => { assert.ok(cond, 'XATO: ' + name); pass++; console.log('  ✓', name); };
 
 (async () => {
@@ -23,18 +32,18 @@ const ok = (name, cond) => { assert.ok(cond, 'XATO: ' + name); pass++; console.l
   const srv = createApp().listen(0); base = 'http://localhost:' + srv.address().port;
 
   // --- ikkita mustaqil biznes egasi
-  const A = (await call('POST', '/api/auth/register', null, { shopName: 'Do\'kon A', phone: '+998901111111', password: 'secretA1' })).j;
-  const B = (await call('POST', '/api/auth/register', null, { shopName: 'Do\'kon B', phone: '+998902222222', password: 'secretB1' })).j;
+  const A = (await reg('Do\'kon A', '+998901111111', 'secretA1')).j;
+  const B = (await reg('Do\'kon B', '+998902222222', 'secretB1')).j;
   ok('ikki do\'kon ro\'yxatdan o\'tdi', A.token && B.token && A.shop.id !== B.shop.id);
-  ok('bir xil raqam ikkinchi marta olinmaydi', (await call('POST', '/api/auth/register', null, { shopName: 'x', phone: '998901111111', password: 'secretA1' })).s === 409);
+  ok('bir xil raqam ikkinchi marta olinmaydi', (await call('POST', '/api/auth/register/start', null, { phone: '90 111 11 11' })).s === 409);
 
   // --- A: mahsulotlar va xodim
   const p1 = (await call('POST', '/api/products', A.token, { name: 'Gilam', unit: 'm', cost: 10000, pct: 20, qty: 50, barcode: '111' })).j;
   const p2 = (await call('POST', '/api/products', A.token, { name: 'Lampa', unit: 'dona', cost: 5000, pct: 10, qty: 3 })).j;
   ok('admin mahsulot qo\'shdi (tannarx ko\'rinadi)', p1.id && p1.cost === 10000 && p1.sellPrice === 12000);
-  const st = (await call('POST', '/api/staff', A.token, { name: 'Ali', phone: '+998903333333', password: 'seller123' })).j;
-  ok('admin xodim yaratdi', st.role === 'seller');
-  const S = (await call('POST', '/api/auth/login', null, { phone: '998903333333', password: 'seller123' })).j;
+  const st = (await call('POST', '/api/staff', A.token, { name: 'Ali' })).j;
+  ok('admin xodim yaratdi (tizim ID va parol berdi)', st.role === 'seller' && /^\d{6}$/.test(st.loginId) && st.password.length >= 8);
+  const S = (await call('POST', '/api/auth/login', null, { id: st.loginId, password: st.password })).j;
   ok('xodim login qildi va A do\'koniga ulandi', S.token && S.shop.id === A.shop.id);
 
   // --- B hech narsani ko'rmaydi / tega olmaydi
@@ -91,9 +100,9 @@ const ok = (name, cond) => { assert.ok(cond, 'XATO: ' + name); pass++; console.l
   // --- xodimni o'chirish va autentifikatsiya
   await call('PATCH', `/api/staff/${st.id}`, A.token, { active: false });
   ok('o\'chirilgan xodim tokeni darrov ishlamaydi', (await call('GET', '/api/products', S.token)).s === 401);
-  ok('o\'chirilgan xodim login qila olmaydi', (await call('POST', '/api/auth/login', null, { phone: '998903333333', password: 'seller123' })).s === 401);
+  ok('o\'chirilgan xodim login qila olmaydi', (await call('POST', '/api/auth/login', null, { id: st.loginId, password: st.password })).s === 401);
   ok('tokensiz so\'rov rad etiladi', (await call('GET', '/api/products')).s === 401);
-  ok('noto\'g\'ri parol', (await call('POST', '/api/auth/login', null, { phone: '998901111111', password: 'wrong' })).s === 401);
+  ok('noto\'g\'ri parol', (await call('POST', '/api/auth/login', null, { id: A.user.loginId, password: 'wrong' })).s === 401);
 
   // --- reklama
   ok('SUPER_KEY siz reklama qo\'shib bo\'lmaydi', (await call('POST', '/api/super/ads', null, { title: 'x' })).s === 403);
@@ -108,7 +117,7 @@ const ok = (name, cond) => { assert.ok(cond, 'XATO: ' + name); pass++; console.l
     buys: [{ t: Date.now(), name: 'Eski gilam', amount: 500 }], debts: [{ t: 5, sid: 5, name: 'Karim', amount: 220, total: 240, ph: '+998905555555', due: '2026-12-31', paid: false, pays: [{ t: Date.now(), a: 20 }] }],
     exp: [{ t: Date.now(), name: 'Ijara', amount: 50 }], set: { lang: 'ru', sms: true, days: 2 } };
   ok('seller/boshqa admin import qila olmaydi (B do\'konida ma\'lumot bor)', (await call('POST', '/api/import', B.token, old)).s === 409);
-  const C = (await call('POST', '/api/auth/register', null, { shopName: 'Do\'kon C', phone: '+998906666666', password: 'secretC1' })).j;
+  const C = (await reg('Do\'kon C', '+998906666666', 'secretC1')).j;
   const imp = await call('POST', '/api/import', C.token, old);
   ok('eski ma\'lumot ko\'chirildi', imp.s === 201 && imp.j.products === 1 && imp.j.sales === 1 && imp.j.debts === 1);
   const cd = (await call('GET', '/api/debts', C.token)).j;

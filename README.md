@@ -8,11 +8,19 @@ Node.js + Express + Knex. Bazа: lokal/bepul uchun **SQLite**, pullik serverda *
     npm install
     cp .env.example .env      # JWT_SECRET va SUPER_KEY ni to'ldiring
     npm start                 # http://localhost:3000
-    npm test                  # 43 ta tekshiruv (do'konlar izolyatsiyasi, rollar, nasiya...)
+    npm test                  # do'konlar izolyatsiyasi, rollar, nasiya, SMS tasdiqlash, parol tiklash, migratsiya, UI
 
 ## Qanday ishlaydi
-- **Har bir biznes = alohida do'kon (shop).** `POST /api/auth/register` yangi do'kon va admin yaratadi.
-- Admin `POST /api/staff` bilan xodimga telefon + parol ochadi. Xodim shu bilan kiradi va admin do'koniga ulanadi.
+- **Har bir biznes = alohida do'kon (shop).** Admin telefon raqamini **SMS kod bilan tasdiqlab** ro'yxatdan o'tadi
+  (`POST /api/auth/register/start` -> `POST /api/auth/register`). Tasdiqlanmagan raqam bilan hisob ochib bo'lmaydi.
+- **Kirish ID bilan.** Tizim har bir foydalanuvchiga 6 xonali takrorlanmas ID beradi; admin ham, xodim ham `ID + parol` bilan kiradi.
+  (Eski hisoblar migratsiyadan keyin ID oladi; ular o'tish davrida telefon raqami bilan ham kira oladi.)
+- Admin `POST /api/staff {name}` bilan xodim qo'shadi: **tizim ID va vaqtinchalik parolni o'zi beradi** (parol faqat shu javobda ko'rinadi).
+  Xodim kirgach parolni o'zi o'zgartiradi (`POST /api/auth/password`). Xodim parolni unutsa admin `PATCH /api/staff/:id {resetPassword:true}` qiladi.
+- **Admin parolini tiklash:** `POST /api/auth/reset/start` -> SMS kod -> `POST /api/auth/reset/confirm` (javobda ID ham qaytadi).
+- **Telefonni o'zgartirish:** joriy parol + yangi raqamga SMS kod (`/api/auth/phone/start`, `/phone/confirm`).
+- **Hisobni o'chirish:** `POST /api/auth/delete-account {password}`: do'kon, xodimlar va barcha ma'lumot o'chadi.
+- Parol almashganda/tiklanganda eski tokenlar bekor bo'ladi. 8 ta xato urinishdan keyin hisob 15 daqiqaga bloklanadi.
 - **Izolyatsiya:** `shop_id` har so'rovda bazadagi foydalanuvchi qatoridan olinadi (mijoz yuborgan ma'lumotdan emas).
   Har bir so'rov `WHERE shop_id = ?` bilan cheklangan. Boshqa do'kon ID si bilan murojaat qilsangiz 404 qaytadi.
 - **Rollar:** `admin` hamma narsa; `seller` faqat sotadi. Sotuvchiga tannarx (`cost`), foiz (`pct`), foyda
@@ -24,9 +32,11 @@ Node.js + Express + Knex. Bazа: lokal/bepul uchun **SQLite**, pullik serverda *
 ## API
 | Yo'l | Kim | Vazifa |
 |---|---|---|
-| POST /api/auth/register, /login | hamma | do'kon ochish / kirish |
-| GET /api/auth/me, POST /api/auth/password | kirgan | profil / parol almashtirish |
-| GET, POST /api/staff, PATCH /api/staff/:id | admin | xodimlar (name, active, password) |
+| POST /api/auth/register/start, /register, /login | hamma | SMS kod, do'kon ochish, kirish (id + parol) |
+| POST /api/auth/reset/start, /reset/confirm | hamma | admin parolini SMS orqali tiklash |
+| POST /api/auth/phone/start, /phone/confirm, /delete-account | admin | raqam almashtirish, hisobni o'chirish |
+| GET /api/auth/me, POST /api/auth/password | kirgan | profil / parol almashtirish (yangi token qaytadi) |
+| GET, POST /api/staff, PATCH /api/staff/:id | admin | xodimlar (POST {name} -> ID+parol beriladi; PATCH: name, active, resetPassword) |
 | GET /api/products?q=&barcode= | hamma | ro'yxat (sotuvchiga tannarxsiz) |
 | POST, PUT, DELETE /api/products(/:id), POST /:id/restock | admin | mahsulot boshqaruvi |
 | POST /api/sales, GET /api/sales(/:id) | hamma | sotish/savat/nasiya; sotuvchi faqat o'zinikini ko'radi |
@@ -41,10 +51,17 @@ Sotuv: `POST /api/sales {customer, items:[{productId, qty, price?}], credit:{pai
 
 ## Bepul serverga qo'yish
 1. Kodni GitHub'ga yuklang, Render/Railway/Fly kabi hostingda "Web Service" oching (Dockerfile bor).
-2. Env: `JWT_SECRET`, `SUPER_KEY`, `NODE_ENV=production`, `TRUST_PROXY=1`.
+2. Env: `JWT_SECRET`, `SUPER_KEY`, `NODE_ENV=production`, `TRUST_PROXY=1`, **SMS:** `ESKIZ_EMAIL`, `ESKIZ_PASSWORD` (pastga qarang).
 3. **Muhim:** ko'p bepul hostinglarda disk doimiy emas, SQLite fayl yo'qolishi mumkin.
    Shuning uchun bepul tashqi PostgreSQL oching va `DATABASE_URL` ga yozing. Jadvallar server yonganda o'zi yaratiladi.
    (Bepul tariflar shartlari o'zgarib turadi, tanlashdan oldin tekshiring.)
+
+## SMS sozlash (majburiy: ro'yxatdan o'tish va parol tiklash SMS kod bilan ishlaydi)
+Hozir [Eskiz.uz](https://eskiz.uz) qo'llab-quvvatlanadi. Env: `ESKIZ_EMAIL`, `ESKIZ_PASSWORD`, ixtiyoriy `ESKIZ_FROM` (default `4546`)
+va `SMS_TEMPLATE` (`{code}` o'rniga kod qo'yiladi). Eskiz'da SMS matni shabloni oldindan tasdiqlanadi: `SMS_TEMPLATE` ni o'sha matnga moslang.
+SMS sozlanmasa production'da ro'yxatdan o'tish 503 qaytaradi. Sinov uchun `SMS_PROVIDER=console` (kod server logiga yoziladi; productionda xavfli).
+Boshqa provayder kerak bo'lsa faqat `src/sms.js` dagi `sendSms` o'zgaradi. Kod 6 xonali, 5 daqiqa amal qiladi, 5 marta xato kiritish mumkin,
+qayta yuborish 60 soniyada bir marta, soatiga 5 tadan ko'p emas; IP bo'yicha `SMS_RATE_LIMIT` (default 10 / 15 daqiqa).
 
 ## Pullik serverga o'tish
 Kod o'zgarmaydi: yangi serverda shu loyihani (yoki Docker image) ishga tushiring, `DATABASE_URL` ni yangi
@@ -74,13 +91,12 @@ admin/sotuvchi/boshqa do'kon/ko'chirish). Kamera skaneri va telefon ekrani bu te
 
 ## Keyingi qadamlar
 - Haqiqiy telefonda sinash (ayniqsa kamera/skaner, HTTPS hostingda).
-- Yangi qatorlar (Xodimlar, huquqlar, ko'chirish) uchun ru/en tarjimalari.
 - Katta do'konlar uchun: sotuvlar hozir 1000 tadan sahifalab yuklanadi; juda ko'p sotuvda hisobotlarni serverga o'tkazish.
 - Yangi sxema o'zgarishlari `src/migrations/002_...js` fayllari orqali qo'shiladi.
 
 ## Vercel'ga qo'yish
 1. GitHub'ga yuklang, Vercel'da "Add New → Project" qiling (Framework: Other).
 2. Storage → Neon (Postgres) ulang: `DATABASE_URL` o'zi qo'shiladi.
-3. Env: `JWT_SECRET`, `SUPER_KEY`. (`NODE_ENV=production` Vercel o'zi qo'yadi.)
+3. Env: `JWT_SECRET`, `SUPER_KEY`, `ESKIZ_EMAIL`, `ESKIZ_PASSWORD`, `SMS_TEMPLATE`. (`NODE_ENV=production` Vercel o'zi qo'yadi.)
 4. Deploy. Jadvallar birinchi so'rovda o'zi yaratiladi. `public/` statik, `/api/*` -> `api/index.js`.
 Cheklov: Vercel so'rov hajmi ~4.5 MB, shuning uchun juda katta eski zaxirani ko'chirish (`/api/import`) o'tmasligi mumkin.

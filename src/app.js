@@ -25,6 +25,10 @@ function createApp() {
   const lim = rateLimit({ windowMs: 15 * 60 * 1000, limit: +process.env.AUTH_RATE_LIMIT || 30, standardHeaders: true, legacyHeaders: false, message: { error: "Juda ko'p urinish. Birozdan keyin qayta urinib ko'ring" } });
   app.use('/api/auth/login', lim);
   app.use('/api/auth/register', lim);
+  app.use('/api/auth/reset', lim);
+  // SMS pul turadi: kod yuboradigan yo'llarga qattiqroq limit (IP bo'yicha)
+  const smsLim = rateLimit({ windowMs: 15 * 60 * 1000, limit: +process.env.SMS_RATE_LIMIT || 10, standardHeaders: true, legacyHeaders: false, message: { error: "Juda ko'p urinish. Birozdan keyin qayta urinib ko'ring" } });
+  ['/api/auth/register/start', '/api/auth/reset/start', '/api/auth/phone/start'].forEach((p) => app.use(p, smsLim));
  
   app.use('/api/auth', require('./routes/auth'));
   app.use('/api/staff', auth, adminOnly, require('./routes/staff'));

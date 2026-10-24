@@ -1,18 +1,27 @@
 // Regressiya testlari: qoldiq to'qnashuvi va import (auth tartibi). Ishga tushirish: node test/regress.js
 const os = require('os'), path = require('path'), fs = require('fs'), assert = require('assert');
 process.env.SQLITE_FILE = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'ombor-r-')), 't.db');
-process.env.JWT_SECRET = 'test-secret'; process.env.AUTH_RATE_LIMIT = '1000'; delete process.env.DATABASE_URL;
+process.env.JWT_SECRET = 'test-secret'; process.env.AUTH_RATE_LIMIT = '1000'; process.env.SMS_RATE_LIMIT = '1000'; process.env.SMS_PROVIDER = 'memory'; delete process.env.DATABASE_URL;
 const { createApp } = require('../src/app'); const { migrate } = require('../src/db');
 let base, n = 0;
 const call = async (m, u, t, b, raw) => {
   const r = await fetch(base + u, { method: m, headers: { 'content-type': 'application/json', ...(t ? { authorization: 'Bearer ' + t } : {}) }, body: raw || (b ? JSON.stringify(b) : undefined) });
   let j = null; try { j = await r.json(); } catch {} return { s: r.status, j };
 };
+// Ro'yxatdan o'tish endi SMS kod bilan: kod xotiradagi "outbox"dan olinadi (SMS_PROVIDER=memory)
+const { outbox } = require('../src/sms');
+const lastCode = (phone) => { const m = [...outbox].reverse().find((x) => x.phone === phone); return m && m.text.match(/\d{6}/)[0]; };
+const reg = async (shopName, phone, password) => {
+  const ph = phone.replace(/\D/g, '');
+  const s = await call('POST', '/api/auth/register/start', null, { phone });
+  if (s.s !== 200) return s;
+  return call('POST', '/api/auth/register', null, { shopName, phone, password, code: lastCode(ph) });
+};
 const ok = (name, c) => { assert.ok(c, 'XATO: ' + name); n++; console.log('  ✓', name); };
 (async () => {
   await migrate();
   const srv = createApp().listen(0); base = 'http://localhost:' + srv.address().port;
-  const A = (await call('POST', '/api/auth/register', null, { shopName: 'A', phone: '+998901111111', password: 'secret1' })).j.token;
+  const A = (await reg('A', '+998901111111', 'secret1')).j.token;
   const p = (await call('POST', '/api/products', A, { name: 'Mix', unit: 'dona', cost: 100, pct: 10, qty: 10 })).j;
  
   // forma ochilganda qoldiq 10 edi; shu orada 4 ta sotildi; admin nomni o'zgartirib saqlaydi
@@ -32,4 +41,3 @@ const ok = (name, c) => { assert.ok(c, 'XATO: ' + name); n++; console.log('  ✓
   ok('tokensiz /api/import 401', r.s === 401);
   srv.close(); console.log('REGRESSIYA: ' + n + ' ta tekshiruv o\'tdi'); process.exit(0);
 })().catch((e) => { console.error(e.message); process.exit(1); });
- 

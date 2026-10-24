@@ -1,52 +1,41 @@
-const express = require('express');
-const bcrypt = require('bcryptjs');
-const { db } = require('../db');
-const { sign, auth } = require('../auth');
-const { ApiError, h, str, phone, idOf, now } = require('../util');
+const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
+const { db } = require('./db');
+const { ApiError, h } = require('./util');
 
-const r = express.Router();
-const pub = (u) => ({ id: u.id, name: u.name, phone: u.phone, role: u.role });
+let SECRET = process.env.JWT_SECRET;
+if (!SECRET) {
+  if (process.env.NODE_ENV === 'production') throw new Error("JWT_SECRET o'rnatilmagan!");
+  SECRET = crypto.randomBytes(32).toString('hex');
+  console.warn("[!] JWT_SECRET yo'q: vaqtinchalik kalit ishlatilmoqda (server qayta yonsa hamma qayta kiradi).");
+}
 
-// Yangi biznes egasi: yangi do'kon + admin yaratiladi. Har bir do'kon alohida.
-r.post('/register', h(async (req, res) => {
-  const shopName = str(req.body.shopName, { req: true, max: 100 });
-  const name = str(req.body.name || shopName, { max: 100 });
-  const ph = phone(req.body.phone);
-  const pw = String(req.body.password || '');
-  if (pw.length < 6) throw new ApiError(400, 'Parol kamida 6 belgi bo\'lsin');
-  if (await db('users').where({ phone: ph }).first()) throw new ApiError(409, 'Bu raqam band');
-  const hash = await bcrypt.hash(pw, 10);
-  const user = await db.transaction(async (trx) => {
-    const sid = idOf(await trx('shops').insert({ name: shopName, created_at: now() }).returning('id'));
-    const uid = idOf(await trx('users').insert({
-      shop_id: sid, phone: ph, name, role: 'admin', password_hash: hash, active: true, created_at: now(),
-    }).returning('id'));
-    return trx('users').where({ id: uid }).first();
-  });
-  res.status(201).json({ token: sign(user), user: pub(user), shop: { id: user.shop_id, name: shopName } });
-}));
+const sign = (u) => jwt.sign({ uid: u.id, v: u.token_version || 0 }, SECRET, { expiresIn: '30d' });
+const secret = () => SECRET;
 
-// Admin ham, xodim ham shu yerdan kiradi; qaysi do'konga tegishliligi bazadan aniqlanadi.
-r.post('/login', h(async (req, res) => {
-  const u = await db('users').where({ phone: String(req.body.phone || '').replace(/\D/g, '') }).first();
-  const ok = u && u.active && (await bcrypt.compare(String(req.body.password || ''), u.password_hash));
-  if (!ok) throw new ApiError(401, "Raqam yoki parol noto'g'ri");
-  const shop = await db('shops').where({ id: u.shop_id }).first();
-  res.json({ token: sign(u), user: pub(u), shop: { id: shop.id, name: shop.name } });
-}));
+// Foydalanuvchi va shop_id HAR SAFAR bazadan olinadi (tokendagi ma'lumotga ishonilmaydi).
+// Shuning uchun o'chirilgan xodim tokeni darrov ishlamay qoladi.
+const auth = h(async (req, res, next) => {
+  const token = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+  let p;
+  try { p = jwt.verify(token, SECRET); } catch { throw new ApiError(401, 'Kirish kerak'); }
+  const u = await db('users').where({ id: p.uid }).first();
+  if (!u || !u.active) throw new ApiError(401, 'Kirish kerak');
+  // Parol almashtirilsa token_version oshadi va oldingi tokenlar ishlamay qoladi (v yo'q eski tokenlar = 0)
+  if ((p.v || 0) !== (u.token_version || 0)) throw new ApiError(401, 'Kirish kerak');
+  req.user = { id: u.id, shopId: u.shop_id, role: u.role, name: u.name, phone: u.phone, loginId: u.login_id };
+  next();
+});
 
-r.get('/me', auth, h(async (req, res) => {
-  const shop = await db('shops').where({ id: req.user.shopId }).first();
-  res.json({ user: pub({ ...req.user }), shop: { id: shop.id, name: shop.name } });
-}));
+const adminOnly = (req, res, next) =>
+  req.user.role === 'admin' ? next() : next(new ApiError(403, 'Faqat admin uchun'));
 
-r.post('/password', auth, h(async (req, res) => {
-  const u = await db('users').where({ id: req.user.id }).first();
-  if (!(await bcrypt.compare(String(req.body.current || ''), u.password_hash))) throw new ApiError(400, "Joriy parol noto'g'ri");
-  const pw = String(req.body.password || '');
-  if (pw.length < 6) throw new ApiError(400, "Parol kamida 6 belgi bo'lsin");
-  await db('users').where({ id: u.id }).update({ password_hash: await bcrypt.hash(pw, 10) });
-  res.json({ ok: true });
-}));
+const superOnly = (req, res, next) => {
+  const key = process.env.SUPER_KEY || '';
+  const got = String(req.headers['x-super-key'] || '');
+  const a = Buffer.from(key), b = Buffer.from(got);
+  if (!key || a.length !== b.length || !crypto.timingSafeEqual(a, b)) return next(new ApiError(403, "Ruxsat yo'q"));
+  next();
+};
 
-module.exports = r;
+module.exports = { sign, secret, auth, adminOnly, superOnly };

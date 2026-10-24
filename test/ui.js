@@ -2,9 +2,11 @@
 const os = require('os'), path = require('path'), fs = require('fs'), assert = require('assert');
 const { JSDOM } = require('jsdom');
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ombor-ui-'));
-process.env.SQLITE_FILE = path.join(tmp, 't.db'); process.env.JWT_SECRET = 't'; process.env.SUPER_KEY = 'sk'; process.env.AUTH_RATE_LIMIT = '1000';
+process.env.SQLITE_FILE = path.join(tmp, 't.db'); process.env.JWT_SECRET = 't'; process.env.SUPER_KEY = 'sk'; process.env.AUTH_RATE_LIMIT = '1000'; process.env.SMS_RATE_LIMIT = '1000'; process.env.SMS_PROVIDER = 'memory';
 const { createApp } = require('../src/app'); const { migrate, db } = require('../src/db');
 
+const { outbox } = require('../src/sms');
+const lastCode = (phone) => { const m = [...outbox].reverse().find((x) => x.phone === phone.replace(/\D/g, '')); return m && m.text.match(/\d{6}/)[0]; };
 let base, n = 0;
 const ok = (name, c) => { assert.ok(c, 'XATO: ' + name); n++; console.log('  ✓', name); };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -26,6 +28,14 @@ async function open(seed) {
   const set = (id, v) => { $('#' + id).value = v; };
   return { w, $, ev, set, errors, dom };
 }
+// UI orqali ro'yxatdan o'tish: kod yuborish -> SMS kodni kiritish -> tasdiqlash
+async function register(c, nm, ph, pw) {
+  await until(() => c.$('#ph'), 'login oynasi'); c.ev('loginV(1)');
+  c.set('nm', nm); c.set('ph', ph); c.set('pw', pw); c.ev('doRegStart()');
+  await until(() => c.$('#cdb') && c.$('#cdb').style.display === 'block', 'SMS kod maydoni');
+  c.set('cd', lastCode(ph)); c.ev('doReg()');
+  await until(() => c.$('nav'), 'ro\'yxatdan o\'tgach asosiy ekran');
+}
 async function login(c, ph, pw) { await until(() => c.$('#ph'), 'login oynasi'); c.set('ph', ph); c.set('pw', pw); c.ev('doLogin()'); await until(() => c.$('nav'), 'asosiy ekran'); }
 
 (async () => {
@@ -34,10 +44,11 @@ async function login(c, ph, pw) { await until(() => c.$('#ph'), 'login oynasi');
 
   /* ===== ADMIN ===== */
   const A = await open();
-  await until(() => A.$('#ph'), 'login oynasi');
-  A.ev("loginV(1)"); A.set('nm', 'Gilam Dunyosi'); A.set('ph', '+998 90 111 22 33'); A.set('pw', 'admin123'); A.ev('doReg()');
-  await until(() => A.$('nav'), 'ro\'yxatdan o\'tgach asosiy ekran');
-  ok('admin ro\'yxatdan o\'tdi va kirdi', A.ev('U.role') === 'admin' && A.ev('U.name') === 'Gilam Dunyosi');
+  await register(A, 'Gilam Dunyosi', '+998 90 111 22 33', 'admin123');
+  ok('admin SMS kod bilan ro\'yxatdan o\'tdi va kirdi', A.ev('U.role') === 'admin' && A.ev('U.name') === 'Gilam Dunyosi');
+  const adminId = A.ev('U.loginId');
+  ok('admin 6 xonali ID oldi va oyna ko\'rsatdi', /^\d{6}$/.test(adminId) && new RegExp(adminId).test(A.$('#md').innerHTML) && /Ro'yxatdan o'tdingiz/.test(A.$('#md').innerHTML));
+  A.ev('close()');
   ok('admin 5 ta tab ko\'radi (Kiritish bor)', A.w.document.querySelectorAll('nav button').length === 5);
   ok('admin bosh sahifada foyda va tiles ko\'radi', /Bugungi foyda/.test(A.$('#v').innerHTML) && /Savdo grafigi/.test(A.$('#v').innerHTML));
 
@@ -48,9 +59,12 @@ async function login(c, ph, pw) { await until(() => c.$('#ph'), 'login oynasi');
   await until(() => A.ev('D.products.length') === 2, 'ikkinchi mahsulot');
 
   A.ev('staffV()'); await until(() => A.$('#sfn'), 'xodimlar oynasi');
-  A.set('sfn', 'Sardor'); A.set('sfp', '+998901234567'); A.set('sfw', 'sotuv123'); A.ev('addStaff()');
-  await until(() => /Sardor/.test(A.$('#md').innerHTML), 'xodim ro\'yxatda');
-  ok('admin xodim yaratdi (UI orqali)', true);
+  A.set('sfn', 'Sardor'); A.ev('addStaff()');
+  await until(() => A.$('#cid') && A.$('#cpw'), 'xodim ID va paroli ko\'rsatildi');
+  const sellerId = A.$('#cid').textContent, sellerPw = A.$('#cpw').textContent;
+  ok('xodim qo\'shilganda tizim ID va parol berdi', /^\d{6}$/.test(sellerId) && sellerPw.length >= 8 && /Sardor/.test(A.$('#md').innerHTML) && A.ev('CRED').includes(sellerPw));
+  A.ev('staffV()'); await until(() => A.$('#md') && !A.$('#cpw') && /Sardor/.test(A.$('#md').innerHTML) && A.ev('CRED') === '', 'xodim ro\'yxatda');
+  ok('xodim ro\'yxatida ID ko\'rinadi, parol ko\'rinmaydi', new RegExp('ID: ' + sellerId).test(A.$('#md').innerHTML) && !A.$('#md').innerHTML.includes(sellerPw));
   A.ev('close()');
 
   A.ev('expV()'); await until(() => A.$('#en'), 'xarajat oynasi'); A.set('en', 'Ijara'); A.set('ea', '30000'); A.ev('addExp()');
@@ -79,7 +93,7 @@ async function login(c, ph, pw) { await until(() => c.$('#ph'), 'login oynasi');
 
   /* ===== SOTUVCHI ===== */
   const S = await open();
-  await login(S, '+998901234567', 'sotuv123');
+  await login(S, sellerId, sellerPw);
   ok('sotuvchi kirdi, do\'kon nomi xo\'jayinniki', S.ev('U.role') === 'seller' && S.ev('U.name') === 'Gilam Dunyosi');
   ok('sotuvchi 4 tab ko\'radi (Kiritish yo\'q)', S.w.document.querySelectorAll('nav button').length === 4 && !/Kiritish/.test(S.$('nav').innerHTML));
   ok('sotuvchi mahsulotlarida tannarx YO\'Q (brauzer xotirasida ham)', S.ev('D.products.every(p=>p.cost===undefined&&p.pct===undefined)') && S.ev('JSON.stringify(D).includes("10000")') === false);
@@ -93,6 +107,7 @@ async function login(c, ph, pw) { await until(() => c.$('#ph'), 'login oynasi');
   ok('sotuvchi sota oldi', S.ev('D.sales[0].items[0].price') === 12000);
   ok('sotuvchi chekida foyda va tannarx yo\'q', !/foyda/i.test(S.$('#md').innerHTML) && S.ev('D.sales[0].items[0].cost===undefined'));
   S.ev('close()'); S.ev("go('me')");
+  ok('sotuvchi profilida o\'z ID si ko\'rinadi', new RegExp('ID: ' + sellerId).test(S.$('#v').innerHTML));
   ok('sotuvchi profilida Xodimlar/Xarajatlar/Excel yo\'q', !/Xodimlar|Xarajatlar|Excel/.test(S.$('#v').innerHTML) && /SOTUVCHI/.test(S.$('#v').innerHTML));
   ok('sotuvchi faqat o\'z sotuvlarini ko\'radi', S.ev('D.sales.length') === 1);
   ok('sotuvchiga xarajat/tovar tarixi yuklanmaydi', S.ev('D.exp.length') === 0 && S.ev('D.buys.length') === 0);
@@ -121,19 +136,56 @@ async function login(c, ph, pw) { await until(() => c.$('#ph'), 'login oynasi');
   ok('reklama bosh sahifada chiqdi va HTML qochirildi (XSS yo\'q)', /Aksiya &lt;b&gt;5%&lt;\/b&gt;/.test(A.$('#ad').innerHTML) && !A.$('#ad b + b'));
 
   /* ===== BOSHQA DO'KON ===== */
-  const B = await open(); await until(() => B.$('#ph'), 'login');
-  B.ev("loginV(1)"); B.set('nm', 'Boshqa Do\'kon'); B.set('ph', '+998977000000'); B.set('pw', 'boshqa123'); B.ev('doReg()'); await until(() => B.$('nav'), 'B kirdi');
+  const B = await open(); await register(B, 'Boshqa Do\'kon', '+998977000000', 'boshqa123');
   ok('boshqa biznes egasi hech narsani ko\'rmaydi', B.ev('D.products.length') === 0 && B.ev('D.sales.length') === 0 && B.ev('D.debts.length') === 0 && B.ev('D.exp.length') === 0);
+
+  /* ===== PAROLNI TIKLASH, RAQAM ALMASHTIRISH, HISOBNI O'CHIRISH (UI) ===== */
+  const F = await open(); await until(() => F.$('#ph'), 'login');
+  ok('kirish ekranida "ID raqam" va "Parolni unutdingizmi?" bor', /ID raqam/.test(F.$('.lg').innerHTML) && /Parolni unutdingizmi\?/.test(F.$('.lg').innerHTML) && !/Telefon raqam/.test(F.$('.lg').innerHTML));
+  F.ev('loginV(2)'); F.set('ph', '+998 90 111 22 33'); F.ev('doResetStart()');
+  await until(() => F.$('#cdb') && F.$('#cdb').style.display === 'block', 'tiklash kodi maydoni');
+  F.set('cd', lastCode('998901112233')); F.set('pw', 'yangi1234'); F.ev('doResetConfirm()');
+  await until(() => F.$('#ph') && F.$('#ph').value === adminId && /Parol yangilandi/.test(F.$('.lg').innerHTML), 'parol yangilandi va ID ko\'rsatildi');
+  ok('parol tiklandi: ID ko\'rsatildi va kirish oynasiga o\'tdi', true);
+  F.set('pw', 'yangi1234'); F.ev('doLogin()'); await until(() => F.$('nav'), 'yangi parol bilan kirdi');
+  ok('yangi parol bilan ID orqali kirdi', F.ev('U.role') === 'admin' && F.ev('U.loginId') === adminId);
+
+  F.ev("go('me')"); F.ev('secV()');
+  ok('xavfsizlik oynasida ID, raqamni o\'zgartirish va hisobni o\'chirish bor', new RegExp(adminId).test(F.$('#md').innerHTML) && /phoneV\(\)/.test(F.$('#md').innerHTML) && /delAccV\(\)/.test(F.$('#md').innerHTML));
+  const tok0 = F.ev('TOK'); F.set('cp', 'yangi1234'); F.set('np', 'yana5678'); F.ev('chPw()');
+  await until(() => F.ev('TOK') !== tok0, 'yangi token olindi');
+  ok('parol almashgach sessiya uzilmaydi (yangi token)', (await F.w.fetch('/api/auth/me', { headers: { authorization: 'Bearer ' + F.ev('TOK') } })).status === 200 && (await F.w.fetch('/api/auth/me', { headers: { authorization: 'Bearer ' + tok0 } })).status === 401);
+
+  F.ev('phoneV()'); F.set('npn', '+998 90 555 66 77'); F.set('ppw', 'yana5678'); F.ev('phStart()');
+  await until(() => F.$('#pcb') && F.$('#pcb').style.display === 'block', 'raqam kodi maydoni');
+  F.set('pcd', lastCode('998905556677')); F.ev('phConfirm()');
+  await until(() => F.ev('U.phone') === '998905556677', 'raqam almashdi');
+  ok('telefon raqam SMS kod bilan almashtirildi', true);
+
+  F.ev('delAccV()'); F.set('dpw', 'xato-parol'); F.ev('delAcc()');
+  await until(() => /noto'g'ri/.test(F.$('#er').textContent), 'noto\'g\'ri parol xabari');
+  ok('noto\'g\'ri parol bilan hisob o\'chmaydi', !!F.$('nav'));
+  F.set('dpw', 'yana5678'); F.ev('delAcc()');
+  await until(() => F.$('#ph') && !F.$('nav'), 'hisob o\'chdi, kirish oynasi');
+  F.set('ph', adminId); F.set('pw', 'yana5678'); F.ev('doLogin()');
+  await until(() => /noto'g'ri/.test(F.$('#er').textContent), 'o\'chirilgan hisob kira olmaydi');
+  ok('hisob o\'chirildi va qayta kirib bo\'lmaydi', true);
+
+  const R = await open(); await until(() => R.$('#ph'), 'login'); R.ev("setLang('ru');loginV(0)");
+  await until(() => /Забыли пароль\?/.test(R.$('.lg').innerHTML), 'ruscha tarjima');
+  ok('kirish ekrani ruscha tarjima qilinadi (ID, parolni unutdingizmi)', /ID номер/.test(R.$('.lg').innerHTML));
+  R.ev('loginV(1)'); await until(() => /Отправить код/.test(R.$('.lg').innerHTML), 'ro\'yxat tarjimasi');
+  ok('ro\'yxatdan o\'tish ekrani ruscha tarjima qilinadi', /Отправить код/.test(R.$('.lg').innerHTML));
 
   /* ===== ESKI MA'LUMOTNI KO'CHIRISH ===== */
   const old = { products: [{ id: '1', name: 'Eski mahsulot', unit: 'kg', cost: 500, pct: 10, qty: 7, min: 1, bc: '', w: 0 }], sales: [{ id: 9, t: Date.now(), cust: 'Eski mijoz', items: [{ name: 'Eski mahsulot', unit: 'kg', qty: 1, price: 550, cost: 500 }] }], buys: [], debts: [], exp: [] };
   const M = await open((w) => w.localStorage.setItem('data:998944000000', JSON.stringify(old)));
-  await until(() => M.$('#ph'), 'login'); M.ev("loginV(1)"); M.set('nm', 'Ko\'chuvchi'); M.set('ph', '+998944000000'); M.set('pw', 'koch1234'); M.ev('doReg()');
-  await until(() => M.$('#md') && /Eski ma'lumot topildi/.test(M.$('#md').innerHTML), 'ko\'chirish taklifi');
+  await register(M, 'Ko\'chuvchi', '+998944000000', 'koch1234');
+  await until(() => M.$('#md') && /Eski ma'lumot topildi/.test(M.$('#md').innerHTML) || (M.ev('close()'), M.ev('migrateOffer()'), false), 'ko\'chirish taklifi');
   ok('eski ma\'lumot topilganda taklif chiqdi', true);
   M.ev('doMigrate()'); await until(() => M.ev('D.products.length') === 1 && M.ev('D.sales.length') === 1, 'ko\'chirildi');
   ok('eski ma\'lumot serverga ko\'chirildi', M.ev('D.products[0].name') === 'Eski mahsulot' && M.ev('D.sales[0].cust') === 'Eski mijoz');
 
-  for (const c of [A, S, B, M]) ok('brauzer konsolida JS xatosi yo\'q', c.errors.length === 0 || (console.log(c.errors), false));
+  for (const c of [A, S, B, M, F, R]) ok('brauzer konsolida JS xatosi yo\'q', c.errors.length === 0 || (console.log(c.errors), false));
   console.log(`\nUI TEST: HAMMASI JOYIDA (${n} ta tekshiruv)`); srv.close(); await db.destroy(); fs.rmSync(tmp, { recursive: true, force: true }); process.exit(0);
 })().catch((e) => { console.error('\n' + (e.stack || e)); process.exit(1); });
