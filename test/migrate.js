@@ -21,10 +21,14 @@ let n = 0; const ok = (name, c) => { assert.ok(c, 'XATO: ' + name); n++; console
   ]);
   await db('products').insert({ shop_id: sidv, name: 'Gilam', unit: 'm', cost: 10, pct: 0, qty: 5, min: 0, width: 0, created_at: 1 });
 
+  const oldSale = (await db('sales').insert({ shop_id: sidv, seller_id: 1, customer: 'Eski mijoz', total: 100, paid: 100, created_at: 5 }).returning('id'))[0];
+  await db('sale_items').insert({ shop_id: sidv, sale_id: typeof oldSale === 'object' ? oldSale.id : oldSale, name: 'Gilam', unit: 'm', qty: 1, price: 100, cost: 10 });
   await migrate(); // 002
   const us = await db('users').orderBy('id');
   ok('barcha eski foydalanuvchilar saqlandi', us.length === 2 && us[0].phone === '998901234567');
   ok('har biriga 6 xonali takrorlanmas ID berildi', us.every((u) => /^\d{6}$/.test(u.login_id)) && us[0].login_id !== us[1].login_id);
+  ok('eski sotuvlar bekor qilinmagan holda qoldi (voided_at bo\'sh)', (await db('sales').where({ shop_id: sidv }).whereNull('voided_at')).length === 1);
+  ok('sms_log jadvali yaratildi', await db.schema.hasTable('sms_log'));
   ok('boshqa jadvallar (mahsulot) joyida', (await db('products').where({ shop_id: sidv })).length === 1);
   ok('ID unique indeksi bor (takror qo\'shib bo\'lmaydi)', await db('users').insert({ shop_id: sidv, phone: null, login_id: us[0].login_id, name: 'x', role: 'seller', password_hash: hash, created_at: 3 }).then(() => false, () => true));
   ok('telefonsiz xodim qo\'shsa bo\'ladi (phone NOT NULL emas)', await db('users').insert({ shop_id: sidv, phone: null, login_id: '555555', name: 'Telefonsiz', role: 'seller', password_hash: hash, created_at: 3 }).then(() => true, () => false));

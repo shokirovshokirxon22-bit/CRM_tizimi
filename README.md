@@ -8,7 +8,7 @@ Node.js + Express + Knex. Bazа: lokal/bepul uchun **SQLite**, pullik serverda *
     npm install
     cp .env.example .env      # JWT_SECRET va SUPER_KEY ni to'ldiring
     npm start                 # http://localhost:3000
-    npm test                  # do'konlar izolyatsiyasi, rollar, nasiya, SMS tasdiqlash, parol tiklash, migratsiya, UI
+    npm test                  # do'konlar izolyatsiyasi, rollar, nasiya, SMS tasdiqlash va limitlari, sotuvni bekor qilish, parol tiklash, migratsiya, UI
 
 ## Qanday ishlaydi
 - **Har bir biznes = alohida do'kon (shop).** Admin telefon raqamini **SMS kod bilan tasdiqlab** ro'yxatdan o'tadi
@@ -25,6 +25,9 @@ Node.js + Express + Knex. Bazа: lokal/bepul uchun **SQLite**, pullik serverda *
   Har bir so'rov `WHERE shop_id = ?` bilan cheklangan. Boshqa do'kon ID si bilan murojaat qilsangiz 404 qaytadi.
 - **Rollar:** `admin` hamma narsa; `seller` faqat sotadi. Sotuvchiga tannarx (`cost`), foiz (`pct`), foyda
   server tomonida umuman yuborilmaydi. Narx, tannarx va qoldiq tekshiruvi serverda.
+- **Sotuvni bekor qilish** (`POST /api/sales/:id/void`): mahsulotlar omborga qaytadi, shu sotuvning qarzi (bo'lsa) o'chadi, sotuv hisobotlardan chiqadi.
+  Sotuv bazadan o'chmaydi: kim va qachon bekor qilgani saqlanadi (admin `GET /api/sales?voided=1` bilan tarixni ko'radi).
+  Admin istalgan sotuvni bekor qiladi. Sotuvchi faqat o'zining sotuvini, `SELLER_VOID_MINUTES` (default 15) daqiqa ichida va qarz bo'yicha to'lov olinmagan bo'lsa (`0` = sotuvchi umuman bekor qila olmaydi).
 - Sotuvchi huquqlari admin sozlamalarida: `sellerEditPrice` (narxni o'zgartirish, default: yo'q),
   `sellerSeeDebts` (qarzdorlarni ko'rish, default: ha).
 - O'chirilgan (`active:false`) xodim tokeni darrov ishlamay qoladi.
@@ -40,6 +43,7 @@ Node.js + Express + Knex. Bazа: lokal/bepul uchun **SQLite**, pullik serverda *
 | GET /api/products?q=&barcode= | hamma | ro'yxat (sotuvchiga tannarxsiz) |
 | POST, PUT, DELETE /api/products(/:id), POST /:id/restock | admin | mahsulot boshqaruvi |
 | POST /api/sales, GET /api/sales(/:id) | hamma | sotish/savat/nasiya; sotuvchi faqat o'zinikini ko'radi |
+| POST /api/sales/:id/void | admin (+sotuvchi, o'ziniki, muddat ichida) | sotuvni bekor qilish (ombor qaytadi, qarz o'chadi) |
 | GET /api/debts, POST /:id/pay, GET /:id/payments, POST /api/debts | admin (+sotuvchi, ruxsat bilan) | qarzlar |
 | GET, POST, DELETE /api/expenses | admin | xarajatlar |
 | GET /api/reports/summary?from=&to=&tz= | admin | kirim, foyda, grafik, reyting, qarz, ombor qiymati |
@@ -61,7 +65,11 @@ Hozir [Eskiz.uz](https://eskiz.uz) qo'llab-quvvatlanadi. Env: `ESKIZ_EMAIL`, `ES
 va `SMS_TEMPLATE` (`{code}` o'rniga kod qo'yiladi). Eskiz'da SMS matni shabloni oldindan tasdiqlanadi: `SMS_TEMPLATE` ni o'sha matnga moslang.
 SMS sozlanmasa production'da ro'yxatdan o'tish 503 qaytaradi. Sinov uchun `SMS_PROVIDER=console` (kod server logiga yoziladi; productionda xavfli).
 Boshqa provayder kerak bo'lsa faqat `src/sms.js` dagi `sendSms` o'zgaradi. Kod 6 xonali, 5 daqiqa amal qiladi, 5 marta xato kiritish mumkin,
-qayta yuborish 60 soniyada bir marta, soatiga 5 tadan ko'p emas; IP bo'yicha `SMS_RATE_LIMIT` (default 10 / 15 daqiqa).
+qayta yuborish 60 soniyada bir marta, bir raqamga soatiga 5 tadan ko'p emas.
+Limitlar bazada hisoblanadi (`sms_log` jadvali), shuning uchun Vercel'da ham ishlaydi: IP bo'yicha `SMS_RATE_LIMIT` (default 10 / 15 daqiqa) va
+butun tizim bo'yicha `SMS_DAILY_LIMIT` (default 300 / 24 soat, `0` = cheklovsiz). Kunlik limit Eskiz balansini bot hujumidan himoya qiladi:
+tugasa foydalanuvchi "SMS xizmati band" (503) xabarini ko'radi va Vercel Logs'ga ogohlantirish yoziladi. Ko'proq foydalanuvchi bo'lsa limitni oshiring.
+Yuborilmagan (Eskiz xato bergan) SMS limitga hisoblanmaydi.
 
 ## Pullik serverga o'tish
 Kod o'zgarmaydi: yangi serverda shu loyihani (yoki Docker image) ishga tushiring, `DATABASE_URL` ni yangi
@@ -91,6 +99,7 @@ admin/sotuvchi/boshqa do'kon/ko'chirish). Kamera skaneri va telefon ekrani bu te
 
 ## Keyingi qadamlar
 - Haqiqiy telefonda sinash (ayniqsa kamera/skaner, HTTPS hostingda).
+- Sotuvni qisman qaytarish (bitta mahsulotni) hozircha yo'q: faqat butun sotuv bekor qilinadi.
 - Katta do'konlar uchun: sotuvlar hozir 1000 tadan sahifalab yuklanadi; juda ko'p sotuvda hisobotlarni serverga o'tkazish.
 - Yangi sxema o'zgarishlari `src/migrations/002_...js` fayllari orqali qo'shiladi.
 

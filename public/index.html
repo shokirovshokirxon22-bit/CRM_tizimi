@@ -166,7 +166,10 @@ function soldV0(){V(hd('Sotilgan Mahsulotlar')+`<div class="list">${D.sales.slic
 function sd(id){const s=D.sales.find(x=>x.id==id),u=s.debt&&!s.paid;
  modal(`<h3>${esc(s.cust)}</h3><p class="mu">${dt(s.t)}</p>${s.items.map(i=>`<div class="sp" style="margin:8px 0"><span>${esc(i.name)}<br><span class="mu">${i.qty} ${UL[i.unit]} × ${fmt(i.price)}</span></span><b>${fmt(i.qty*i.price)}</b></div>`).join('')}<hr>
  <div class="sp"><b>Jami</b><b class="pc">${fmt(tot(s))} so'm</b></div>${isA()?`<div class="sp"><span class="mu">Sof foyda</span><b class="gn">${fmt(prof(s))} so'm</b></div>`:''}
- ${u&&D.set.seeDebts?`<button class="bt" onclick="paySale(${id})">💵 To'lov qabul qilish</button>`:''}<div class="row" style="margin-top:8px"><button class="g" onclick="printR(${id})">🖨 Chek / PDF</button><button class="g" onclick="tgR(${id})">✈️ Telegram</button><button class="g" onclick="shareR(${id})">📤 Ulashish</button></div>`)}
+ ${u&&D.set.seeDebts?`<button class="bt" onclick="paySale(${id})">💵 To'lov qabul qilish</button>`:''}<div class="row" style="margin-top:8px"><button class="g" onclick="printR(${id})">🖨 Chek / PDF</button><button class="g" onclick="tgR(${id})">✈️ Telegram</button><button class="g" onclick="shareR(${id})">📤 Ulashish</button></div>${s.can?`<button class="g rd" style="margin-top:8px;width:100%" onclick="voidSale(${id})">↩️ Sotuvni bekor qilish</button>`:''}`)}
+async function voidSale(id){const s=D.sales.find(x=>x.id==id);if(!s||!confirm(tx("Sotuv bekor qilinsinmi? Mahsulotlar omborga qaytariladi, qarz (bo'lsa) o'chiriladi.")))return;
+ const r=await tryA(()=>api('/sales/'+id+'/void','POST',{}));if(!r)return;await tryA(sync);close();
+ toast(tx("Sotuv bekor qilindi ✅")+(r.skipped?' ('+tx("o'chirilgan mahsulot omborga qaytmadi")+')':''));tab=='sold'?soldV():render()}
 /* --- Profil --- */
 async function setPin(){const v=$('#pin').value;if(!/^\d{4}$/.test(v))return toast('4 ta raqam kiriting');D.set.pin=await sha(v);save();close();toast("PIN o'rnatildi ✅")}
 function delPin(){delete D.set.pin;save();close()}
@@ -185,7 +188,7 @@ function pic(f,mx,k){if(!f)return;const r=new FileReader();r.onload=()=>{const i
 function delPic(){delete D.set.bg;delete D.set.av;save();bg();close();render()}
 function bg(){const b=document.body.style;if(D.set.bg){b.backgroundImage=`linear-gradient(var(--ov),var(--ov)),url(${D.set.bg})`;b.backgroundSize='cover';b.backgroundAttachment='fixed'}else b.backgroundImage=''}
 /* ===== TILLAR (uz asosiy; ru/en lug'at orqali) ===== */
-const W=[["Uy","Главная","Home"],["Kiritish","Добавить","Add"],["Qidiruv","Поиск","Search"],["Sotildi","Продано","Sold"],["Profil","Профиль","Profile"],
+const W=[["Uy","Главная","Home"],["Sotuvni bekor qilish","Отменить продажу","Cancel sale"],["Sotuv bekor qilinsinmi? Mahsulotlar omborga qaytariladi, qarz (bo'lsa) o'chiriladi.","Отменить продажу? Товары вернутся на склад, долг (если есть) будет удалён.","Cancel this sale? Items go back to stock and the debt (if any) is removed."],["Sotuv bekor qilindi ✅","Продажа отменена ✅","Sale cancelled ✅"],["o'chirilgan mahsulot omborga qaytmadi","удалённый товар не вернулся на склад","deleted product was not restocked"],["Kiritish","Добавить","Add"],["Qidiruv","Поиск","Search"],["Sotildi","Продано","Sold"],["Profil","Профиль","Profile"],
 ["SOTUVNI NAZORAT QILISH TIZIMI","СИСТЕМА КОНТРОЛЯ ПРОДАЖ","SALES CONTROL SYSTEM"],["Sotuvni nazorat qilish tizimi","Система контроля продаж","Sales control system"],
 ["Kamchiliklar","Нехватка","Shortages"],["Qarzdorlar","Должники","Debtors"],["Savdo grafigi","График продаж","Sales chart"],["Mahsulot reytingi","Рейтинг товаров","Product ranking"],
 ["Bugungi savdo","Продажи сегодня","Today's sales"],["Bugungi foyda","Прибыль сегодня","Today's profit"],["Ombordagi summa","Сумма на складе","Stock value"],["Jami qarzlar","Всего долгов","Total debts"],["Jami qarz","Всего долг","Total debt"],
@@ -335,7 +338,7 @@ async function sync(){const a=isA(),st=await api('/settings'),[pr,sl]=await Prom
  U.name=st.shopName;
  D.set=Object.assign({lang:st.lang,sms:st.sms,days:st.days,tpl:st.tpl,canPrice:a||st.sellerEditPrice,editPrice:!!st.sellerEditPrice,seeDebts:!!seeD,debtFlag:!!st.sellerSeeDebts},loc());
  D.products=pr.map(p=>({id:String(p.id),name:p.name,unit:p.unit,cost:p.cost,pct:p.pct,qty:p.qty,min:p.min,bc:p.barcode,w:p.width,sell:p.sellPrice}));
- D.sales=sl.map(s=>({id:s.id,t:s.createdAt,cust:s.customer,debt:!!s.debt,paid:s.debt?s.debt.paid:false,pay:s.paid,sellerId:s.sellerId,items:s.items}));
+ D.sales=sl.map(s=>({id:s.id,t:s.createdAt,cust:s.customer,debt:!!s.debt,paid:s.debt?s.debt.paid:false,pay:s.paid,sellerId:s.sellerId,can:!!s.canVoid,items:s.items}));
  D.debts=dbt.map(d=>({id:d.id,t:d.createdAt,sid:d.saleId,name:d.name,amount:d.remaining,total:d.total,ph:d.phone,due:d.due,note:d.note,paid:d.paid}));
  D.exp=ex.slice().reverse().map(e=>({id:e.id,t:e.createdAt,name:e.name,amount:e.amount}));
  D.buys=by.map(b=>({t:b.createdAt,name:b.name,amount:b.amount}))}

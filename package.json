@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
-    "test": "node test/smoke.js && node test/regress.js && node test/auth.js && node test/migrate.js && node test/ui.js"
+    "test": "node test/smoke.js && node test/regress.js && node test/auth.js && node test/sms_limit.js && node test/void.js && node test/migrate.js && node test/ui.js"
   },
   "engines": {
     "node": ">=18"

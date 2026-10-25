@@ -130,6 +130,20 @@ async function login(c, ph, pw) { await until(() => c.$('#ph'), 'login oynasi');
   S.ev("sync().catch(()=>{})"); await until(() => S.$('#ph') && !S.$('nav'), 'sotuvchi tizimdan chiqarildi');
   ok('o\'chirilgan xodim darrov chiqarib yuboriladi', true);
 
+  /* ===== SOTUVNI BEKOR QILISH (UI) ===== */
+  const qOf = () => A.ev(`D.products.find(p=>p.id=='${gid}').qty`);
+  const q0 = qOf();
+  A.ev(`go('find');pm('${gid}')`); A.set('xq', '3'); A.ev(`xf('${gid}')`); A.ev(`addC('${gid}',1)`);
+  await until(() => A.$('#xc'), 'savat oynasi (bekor qilish uchun)'); A.set('xc', 'Bekor Mijoz'); A.ev('doSell()');
+  await until(() => A.ev("D.sales.some(s=>s.cust=='Bekor Mijoz')"), 'yangi sotuv');
+  const vid = A.ev("D.sales.find(s=>s.cust=='Bekor Mijoz').id");
+  ok('sotuv ombordan 3 ta kamaytirdi', qOf() === q0 - 3);
+  A.ev('close()'); A.ev(`sd(${vid})`);
+  ok('sotuv oynasida "Sotuvni bekor qilish" tugmasi bor', /Sotuvni bekor qilish/.test(A.$('#md').innerHTML));
+  A.ev(`voidSale(${vid})`);
+  await until(() => !A.ev(`D.sales.some(s=>s.id==${vid})`) && !A.$('#md'), 'sotuv bekor qilindi');
+  ok('bekor qilingach sotuv ro\'yxatdan chiqdi va ombor qaytdi', qOf() === q0);
+
   /* ===== REKLAMA ===== */
   await fetch(base + '/api/super/ads', { method: 'POST', headers: { 'content-type': 'application/json', 'x-super-key': 'sk' }, body: JSON.stringify({ title: 'Aksiya <b>5%</b>', body: 'Yangi tovar', placement: 'home', link: 'https://example.com' }) });
   A.ev("go('home')"); await until(() => A.$('#ad'), 'reklama blokі');

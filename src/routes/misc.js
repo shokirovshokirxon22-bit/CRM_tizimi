@@ -61,7 +61,7 @@ reports.get('/summary', h(async (req, res) => {
   const from = num(req.query.from, { min: 0, def: 0 }), to = num(req.query.to, { min: 0, def: now() });
   const tz = num(req.query.tz, { min: -840, max: 840, def: 0 });
   const rows = await db('sale_items').join('sales', 'sales.id', 'sale_items.sale_id')
-    .where('sales.shop_id', shopId).whereBetween('sales.created_at', [from, to])
+    .where('sales.shop_id', shopId).whereNull('sales.voided_at').whereBetween('sales.created_at', [from, to])
     .select('sales.created_at as t', 'sale_items.name', 'sale_items.unit', 'sale_items.qty', 'sale_items.price', 'sale_items.cost');
   const day = {}, rank = {}; let revenue = 0, profit = 0;
   for (const i of rows) {

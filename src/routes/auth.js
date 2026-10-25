@@ -26,7 +26,7 @@ const phoneTaken = async (ph) => !!(await db('users').whereIn('phone', phoneForm
 r.post('/register/start', h(async (req, res) => {
   const ph = userPhone(req.body.phone);
   if (await phoneTaken(ph)) throw new ApiError(409, 'Bu raqam band');
-  await otp.issue(ph, 'register');
+  await otp.issue(ph, 'register', null, req.ip);
   res.json({ ok: true });
 }));
 
@@ -92,7 +92,7 @@ r.post('/reset/start', h(async (req, res) => {
   try {
     const ph = userPhone(req.body.phone);
     const u = await db('users').where({ role: 'admin', active: true }).whereIn('phone', phoneForms(ph)).first();
-    if (u) await otp.issue(ph, 'reset', u.id);
+    if (u) await otp.issue(ph, 'reset', u.id, req.ip);
   } catch (e) { console.error('[reset/start]', e.message); } // raqam bor-yo'qligi sezilmasligi uchun doim bir xil javob
   res.json({ ok: true });
 }));
@@ -116,7 +116,7 @@ r.post('/phone/start', auth, adminOnly, h(async (req, res) => {
   const ph = userPhone(req.body.phone);
   if (phoneForms(ph).includes(u.phone)) throw new ApiError(400, 'Bu sizning hozirgi raqamingiz');
   if (await phoneTaken(ph)) throw new ApiError(409, 'Bu raqam band');
-  await otp.issue(ph, 'phone', u.id);
+  await otp.issue(ph, 'phone', u.id, req.ip);
   res.json({ ok: true });
 }));
 
