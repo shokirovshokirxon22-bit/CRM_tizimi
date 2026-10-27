@@ -7,8 +7,10 @@ const rateLimit = require('express-rate-limit');
 const { auth, adminOnly } = require('./auth');
 const { ApiError } = require('./util');
 const misc = require('./routes/misc');
+const monitor = require('./monitor');
  
 function createApp() {
+  monitor.init(); // SENTRY_DSN bo'lsa xatolar kuzatiladi, bo'lmasa o'chiq
   const app = express();
   if (process.env.VERCEL && !process.env.TRUST_PROXY) process.env.TRUST_PROXY = '1';
   if (process.env.TRUST_PROXY && process.env.TRUST_PROXY !== '0') app.set('trust proxy', +process.env.TRUST_PROXY || 1);
@@ -18,6 +20,8 @@ function createApp() {
   app.use(cors({ origin: origins.length ? origins : true }));
   // Eski (localStorage) zaxirani ko'chirish katta bo'lishi mumkin, shuning uchun alohida limit
   app.post('/api/import', auth, adminOnly, express.json({ limit: '15mb' }), require('./routes/import'));
+  // Brauzer xatolari: o'zining kichik hajm limiti bor, shuning uchun umumiy json parserdan oldin
+  app.use('/api/client-error', require('./routes/clienterr'));
   app.use(express.json({ limit: '200kb' }));
  
   app.get('/api/health', (req, res) => res.json({ ok: true }));
@@ -32,6 +36,7 @@ function createApp() {
  
   app.use('/api/auth', require('./routes/auth'));
   app.use('/api/staff', auth, adminOnly, require('./routes/staff'));
+  app.use('/api/audit', auth, adminOnly, require('./routes/audit'));
   app.use('/api/products', auth, require('./routes/products'));
   app.use('/api/sales', auth, require('./routes/sales'));
   app.use('/api/debts', auth, require('./routes/debts'));
@@ -49,9 +54,11 @@ function createApp() {
   app.use((err, req, res, next) => {
     if (err instanceof ApiError) return res.status(err.status).json({ error: err.message });
     if (err.type === 'entity.parse.failed') return res.status(400).json({ error: "JSON noto'g'ri" });
+    if (err.type === 'entity.too.large') return res.status(413).json({ error: "So'rov hajmi juda katta" }); // mijoz xatosi: Sentry'ga ketmaydi
     if (err.code === '23505' || /UNIQUE constraint/i.test(err.message || '')) return res.status(409).json({ error: 'Bunday yozuv allaqachon bor' });
     console.error(err);
-    res.status(500).json({ error: 'Server xatosi' });
+    monitor.capture(err, req.user); // Sentry (yoqilgan bo'lsa): faqat kutilmagan 5xx xatolar
+    monitor.flush().finally(() => res.status(500).json({ error: 'Server xatosi' }));
   });
   return app;
 }

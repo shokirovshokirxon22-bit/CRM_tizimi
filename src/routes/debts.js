@@ -1,6 +1,7 @@
 const express = require('express');
 const { db } = require('../db');
 const { ApiError, h, num, str, phone, idOf, now } = require('../util');
+const { audit, who } = require('../audit');
 
 const r = express.Router();
 const view = (d) => ({
@@ -37,7 +38,9 @@ r.post('/', h(async (req, res) => {
     phone: req.body.phone ? phone(req.body.phone) : null, total: amount, amount,
     due: str(req.body.due, { max: 10 }) || null, note: str(req.body.note, { max: 60 }), paid: false, created_at: now(),
   }).returning('id'));
-  res.status(201).json(view(await db('debts').where({ id }).first()));
+  const nd = await db('debts').where({ id }).first();
+  await audit(who(req), { action: 'debt.create', entity: 'debt', entityId: id, summary: `Qarz qo'shildi: ${nd.name}, ${amount} so'm` });
+  res.status(201).json(view(nd));
 }));
 
 r.post('/:id/pay', h(async (req, res) => {
@@ -50,9 +53,10 @@ r.post('/:id/pay', h(async (req, res) => {
     const a = Math.min(want, d.amount), left = d.amount - a;
     await trx('payments').insert({ shop_id: d.shop_id, debt_id: d.id, amount: a, created_by: req.user.id, created_at: now() });
     await trx('debts').where({ id: d.id }).update({ amount: left, paid: left <= 0 });
-    return trx('debts').where({ id: d.id }).first();
+    return { d: await trx('debts').where({ id: d.id }).first(), a };
   });
-  res.json(view(d));
+  await audit(who(req), { action: 'debt.pay', entity: 'debt', entityId: d.d.id, summary: `Qarz to'lovi: ${d.d.name}, ${d.a} so'm qabul qilindi (qoldi ${d.d.amount})`, data: { amount: d.a, remaining: d.d.amount } });
+  res.json(view(d.d));
 }));
 
 module.exports = r;

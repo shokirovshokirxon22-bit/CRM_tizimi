@@ -2,6 +2,8 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const { db } = require('../db');
 const { ApiError, h, str, randomLoginId, randomPassword, idOf, now } = require('../util');
+const lockout = require('../lockout');
+const { audit, who } = require('../audit');
 
 // Faqat admin (app.js da adminOnly bilan ulangan). Hamma so'rov req.user.shopId bilan cheklanadi.
 const r = express.Router();
@@ -35,6 +37,8 @@ r.post('/', h(async (req, res) => {
     } catch (e) { if (!(e.code === '23505' || /UNIQUE constraint/i.test(e.message || ''))) throw e; }
   }
   if (!id) throw new ApiError(500, "ID yaratib bo'lmadi, qayta urinib ko'ring");
+  const created = await db('users').where({ id }).first();
+  await audit(who(req), { action: 'staff.create', entity: 'staff', entityId: id, summary: `Xodim qo'shildi: ${name} (ID ${created.login_id})` });
   res.status(201).json({ ...view(await db('users').where({ id }).first()), password: pw });
 }));
 
@@ -51,6 +55,12 @@ r.patch('/:id', h(async (req, res) => {
   }
   if (newPw) Object.assign(upd, { password_hash: await bcrypt.hash(newPw, 10), token_version: db.raw('token_version + 1'), failed_logins: 0, locked_until: null });
   if (Object.keys(upd).length) await db('users').where({ id: u.id }).update(upd);
+  if (newPw) await lockout.clearUser(u.id);
+  const parts = [];
+  if (upd.name !== undefined && upd.name !== u.name) parts.push(`ism: ${u.name} → ${upd.name}`);
+  if (upd.active !== undefined && !!upd.active !== !!u.active) parts.push(upd.active ? 'qayta faollashtirildi' : "o'chirildi (kira olmaydi)");
+  if (newPw) parts.push(req.body.resetPassword ? 'yangi vaqtinchalik parol berildi' : "parol o'zgartirildi");
+  if (parts.length) await audit(who(req), { action: 'staff.update', entity: 'staff', entityId: u.id, summary: `Xodim ${u.name}: ${parts.join(', ')}` });
   const out = view(await db('users').where({ id: u.id }).first());
   res.json(req.body.resetPassword ? { ...out, password: newPw } : out);
 }));

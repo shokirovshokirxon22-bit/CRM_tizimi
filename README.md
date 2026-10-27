@@ -8,7 +8,7 @@ Node.js + Express + Knex. Bazа: lokal/bepul uchun **SQLite**, pullik serverda *
     npm install
     cp .env.example .env      # JWT_SECRET va SUPER_KEY ni to'ldiring
     npm start                 # http://localhost:3000
-    npm test                  # do'konlar izolyatsiyasi, rollar, nasiya, SMS tasdiqlash va limitlari, sotuvni bekor qilish, parol tiklash, migratsiya, UI
+    npm test                  # do'konlar izolyatsiyasi, rollar, nasiya, SMS tasdiqlash va limitlari, sotuvni bekor qilish, oflayn sotuv, parol tiklash, migratsiya, UI
 
 ## Qanday ishlaydi
 - **Har bir biznes = alohida do'kon (shop).** Admin telefon raqamini **SMS kod bilan tasdiqlab** ro'yxatdan o'tadi
@@ -87,7 +87,18 @@ Frontend endi shu API bilan ishlaydi (eski `localStorage` o'rniga). Interfeys o'
 - Reklama: bosh sahifa (`home`) va sotuvlar (`sales`) tagida chiqadi. Qo'shish:
       curl -X POST $URL/api/super/ads -H "x-super-key: $SUPER_KEY" -H "content-type: application/json" \
            -d '{"title":"Aksiya","body":"Matn","placement":"home","link":"https://...","imageUrl":"https://..."}'
-- `sw.js` `/api/` so'rovlarini keshlamaydi (foydalanuvchilar ma'lumoti aralashmasligi uchun).
+- `sw.js` faqat sahifaning o'zini keshlaydi (internet bo'lmasa ham ilova ochiladi). `/api/` so'rovlarini **hech qachon** keshlamaydi (foydalanuvchilar ma'lumoti aralashmasligi uchun).
+
+## Oflayn sotuv
+Do'konda internet uzilsa sotish to'xtamaydi:
+- Kirgan qurilma oxirgi yuklangan mahsulotlar, sozlamalar va qarzlarni **o'z foydalanuvchisining** kaliti ostida saqlaydi (`oc:<id>`, `om`). Internet bo'lmasa ilova shu nusxa bilan ochiladi. **Yangi kirish (login) internetsiz ishlamaydi**: kamida bir marta onlayn kirgan bo'lish kerak. Token boshqa bo'lsa (boshqa odam kirgan) eski nusxa ishlatilmaydi.
+- Sotuv internet yo'qligida qurilmadagi navbatga yoziladi (`oq:<id>`), mahalliy qoldiq kamayadi, yuqorida `📴 Oflayn · N ta sotuv kutmoqda` belgisi chiqadi (bosilsa ro'yxat ochiladi).
+- Internet qaytganda (yoki ilova qayta ochilganda, har 30 soniyada) navbat vaqt tartibida o'zi yuboriladi: `POST /api/sales {clientId, offline:true, createdAt, items:[{productId, qty, seen}]}`.
+- **Dublikat bo'lmaydi:** har bir sotuvga qurilma noyob `clientId` beradi (`sales.client_id`, migratsiya `005`). Javob yo'lda yo'qolib, sotuv qayta yuborilsa, server avvalgisini qaytaradi (200), ikkinchi marta yozmaydi.
+- **Server qoidalari oflayn sotuvda:** narxni server o'zi hisoblaydi (sotuvchi pasaytira olmaydi; admin/ruxsat berilgan sotuvchi bergan narx o'tadi). Tovar mijozga allaqachon berilgan, shuning uchun qoldiq yetmasa ham sotuv yoziladi (qoldiq minusga ketishi mumkin) va javobda `warnings` qaytadi: narx yoki qoldiq farqi foydalanuvchiga ko'rsatiladi. Sotuv vaqti qurilmadagi haqiqiy vaqt (oxirgi 30 kun ichida, kelajakda emas).
+- Server rad etsa (masalan mahsulot o'chirilgan) sotuv navbatda **xato bilan qoladi**, avtomatik qayta yuborilmaydi; egasi belgidan ochib ko'radi va o'chiradi yoki "Hozir yuborish" bosadi.
+- Hisob o'chirilganda navbat va nusxa ham o'chadi. Oddiy chiqishda (logout) yuborilmagan sotuvlar qurilmada qoladi va shu foydalanuvchi qayta kirganda yuboriladi.
+- Cheklovlar: oflayn paytda yangi mahsulot qo'shish, qarz to'lovi, xarajat, sotuvni bekor qilish ishlamaydi (faqat sotuv). Yuborilmagan sotuvlar "Sotildi" tabi va hisobotlarga server qabul qilgandan keyin kiradi. Chek (PDF/Telegram) oflayn sotuv uchun yuborilgandan keyin ochiladi.
 
 ## APK (Capacitor)
 Frontend serverdan alohida (ilova ichida) bo'lsa, `index.html` boshiga qo'shing:
@@ -109,3 +120,10 @@ admin/sotuvchi/boshqa do'kon/ko'chirish). Kamera skaneri va telefon ekrani bu te
 3. Env: `JWT_SECRET`, `SUPER_KEY`, `ESKIZ_EMAIL`, `ESKIZ_PASSWORD`, `SMS_TEMPLATE`. (`NODE_ENV=production` Vercel o'zi qo'yadi.)
 4. Deploy. Jadvallar birinchi so'rovda o'zi yaratiladi. `public/` statik, `/api/*` -> `api/index.js`.
 Cheklov: Vercel so'rov hajmi ~4.5 MB, shuning uchun juda katta eski zaxirani ko'chirish (`/api/import`) o'tmasligi mumkin.
+
+## Xavfsizlik va kuzatuv
+**Kirishni bloklash (brute-force).** Bloklash endi (foydalanuvchi ID + IP) juftligi bo'yicha (`src/lockout.js`, jadval `login_fail`). Bitta IP dan bitta ID ga 15 daqiqada `LOGIN_MAX_FAILS` (8) ta xato bo'lsa, **faqat shu IP** shu ID ga kira olmaydi. Egasi o'z IP sidan kirishda davom etadi: birovning ID sini terib uni to'sib bo'lmaydi. Uyushgan (ko'p IP) hujumga qarshi oxirgi chora: bitta ID ga hamma IP lardan 1 soatda `LOGIN_USER_HOURLY` (60) ta xato bo'lsa, shu ID uchun kirish vaqtincha to'xtaydi (`0` = o'chiq). Admin xodim parolini yangilasa yoki parol SMS bilan tiklansa, bloklar olinadi. IPv6 da butun /64 bitta hisoblanadi. **Vercel'da `TRUST_PROXY=1` bo'lishi shart**, aks holda hamma foydalanuvchi bitta IP bo'lib ko'rinadi.
+
+**Faoliyat tarixi (audit).** Profil → "📜 Faoliyat tarixi" (faqat admin). Yoziladi: mahsulot qo'shish/tahrir (narx, foiz, qoldiq: avvalgi → yangi)/to'ldirish/o'chirish, sotuvchi narxni o'zgartirgan sotuv, oflayn sotuvda qoldiq yetmaganligi, sotuvni bekor qilish (sabab bilan), qarz va to'lov, xarajat, sozlamalar, xodim (qo'shish, parol yangilash, o'chirish), parol/telefon almashtirish. Har yozuvda **kim**, qachon va IP. Tarix faqat o'qiladi (API orqali o'zgartirib/o'chirib bo'lmaydi), parol, token va to'liq telefon yozilmaydi. Tarix yozilmasa ham asosiy amal to'xtamaydi. `AUDIT_RETENTION_DAYS` (365) kundan eskilari o'zi tozalanadi. Oddiy sotuvlar tarixga ikki marta yozilmaydi (ular `sales` jadvalida sotuvchi bilan turadi).
+
+**Xatolarni kuzatish (Sentry).** `SENTRY_DSN` bo'sh bo'lsa o'chiq. Yoqish: sentry.io da Node.js loyihasi oching, DSN ni Vercel'da `SENTRY_DSN` ga qo'ying. Faqat kutilmagan 5xx xatolar va brauzerdagi kutilmagan JS xatolari ketadi (brauzer xatosi `/api/client-error` orqali, brauzerga Sentry skripti yuklanmaydi). Sentry'ga telefon, parol, token, so'rov tanasi va sarlavhalar **yuborilmaydi** (`src/monitor.js` tozalaydi; tozalab bo'lmasa hodisa yuborilmaydi). Kutilgan xatolar (401, 400, 404, 409, 413) ketmaydi.

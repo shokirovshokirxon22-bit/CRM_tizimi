@@ -2,6 +2,10 @@ const express = require('express');
 const { db } = require('../db');
 const { adminOnly } = require('../auth');
 const { ApiError, h, num, str, idOf, now } = require('../util');
+const { audit, who, changes, fmtChanges } = require('../audit');
+
+const PF = ['name', 'cost', 'pct', 'qty', 'min', 'width', 'barcode'];
+const PL = { name: 'nom', cost: 'tannarx', pct: 'foiz', qty: 'qoldiq', min: 'minimal', width: 'eni', barcode: 'shtrix-kod' };
  
 const r = express.Router();
 const UNITS = ['m', 'dona', 'kg'];
@@ -55,6 +59,7 @@ r.post('/', adminOnly, h(async (req, res) => {
     if (o.qty > 0) await trx('buys').insert({ shop_id: req.user.shopId, name: o.name, amount: o.qty * o.cost, created_at: now() });
     return trx('products').where({ id }).first();
   });
+  await audit(who(req), { action: 'product.create', entity: 'product', entityId: p.id, summary: `Mahsulot qo'shildi: ${p.name} (${p.qty} ${p.unit}, tannarx ${p.cost}, foiz ${p.pct})`, data: { after: { name: p.name, unit: p.unit, qty: p.qty, cost: p.cost, pct: p.pct } } });
   res.status(201).json(view(p, true));
 }));
  
@@ -80,6 +85,8 @@ r.put('/:id', adminOnly, h(async (req, res) => {
     if (added > 0) await trx('buys').insert({ shop_id: req.user.shopId, name: o.name, amount: added * o.cost, created_at: now() });
     return cur;
   });
+  const ch = changes(old, p, PF);
+  if (Object.keys(ch).length) await audit(who(req), { action: 'product.update', entity: 'product', entityId: p.id, summary: `${old.name}: ${fmtChanges(ch, PL)}`, data: { changes: ch } });
   res.json(view(p, true));
 }));
  
@@ -88,19 +95,24 @@ r.post('/:id/restock', adminOnly, h(async (req, res) => {
   const qty = num(req.body.qty, { min: 0.0001 }), cost = num(req.body.cost, { min: 0.0001 });
   if (qty === undefined || cost === undefined) throw new ApiError(400, 'Miqdor va narxni kiriting');
   const p = await db.transaction(async (trx) => {
+    const before = await trx('products').where({ id: +req.params.id, shop_id: req.user.shopId }).first();
     const n = await trx('products').where({ id: +req.params.id, shop_id: req.user.shopId })
       .update({ cost, qty: trx.raw('qty + ?', [qty]) });
     if (!n) throw new ApiError(404, 'Mahsulot topilmadi');
     const p = await trx('products').where({ id: +req.params.id }).first();
     await trx('buys').insert({ shop_id: req.user.shopId, name: p.name, amount: qty * cost, created_at: now() });
-    return p;
+    return { p, before };
   });
-  res.json(view(p, true));
+  const { p: np, before } = p;
+  await audit(who(req), { action: 'product.restock', entity: 'product', entityId: np.id, summary: `${np.name}: +${qty} qo'shildi (qoldiq ${before.qty} → ${np.qty}, tannarx ${before.cost} → ${np.cost})`, data: { qty, before: { qty: before.qty, cost: before.cost }, after: { qty: np.qty, cost: np.cost } } });
+  res.json(view(np, true));
 }));
  
 r.delete('/:id', adminOnly, h(async (req, res) => {
+  const old = await db('products').where({ id: +req.params.id, shop_id: req.user.shopId }).first();
   const n = await db('products').where({ id: +req.params.id, shop_id: req.user.shopId }).del();
   if (!n) throw new ApiError(404, 'Mahsulot topilmadi');
+  await audit(who(req), { action: 'product.delete', entity: 'product', entityId: old.id, summary: `Mahsulot o'chirildi: ${old.name} (qoldiq ${old.qty} ${old.unit}, tannarx ${old.cost})`, data: { before: { name: old.name, qty: old.qty, cost: old.cost, pct: old.pct } } });
   res.json({ ok: true });
 }));
  

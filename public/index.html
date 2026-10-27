@@ -52,6 +52,7 @@ hr{border:0;border-top:1px solid var(--tx);opacity:.3;margin:8px 0}
 .mi i{width:46px;height:46px;border-radius:14px;background:var(--pl);display:grid;place-items:center;font-style:normal;font-size:20px}.mi b{flex:1}
 .modal{position:fixed;inset:0;background:#0008;display:flex;align-items:flex-end;justify-content:center;z-index:9}
 .modal>div{background:var(--cd);width:100%;max-width:520px;border-radius:24px 24px 0 0;padding:20px;max-height:92%;overflow:auto;padding-bottom:calc(20px + env(safe-area-inset-bottom,0px))}
+.ob{position:fixed;top:calc(6px + env(safe-area-inset-top,0px));left:50%;transform:translateX(-50%);z-index:30;border:0;background:var(--or);color:#fff;font:700 12px/1 system-ui,sans-serif;padding:7px 13px;border-radius:99px;box-shadow:0 4px 14px #0003;max-width:92vw;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.ob.off{background:var(--tx);color:var(--bg)}
 .toast{position:fixed;left:50%;bottom:100px;transform:translateX(-50%);background:var(--tx);color:var(--bg);padding:11px 18px;border-radius:14px;z-index:20;font-weight:600}
 .lg{max-width:380px;margin:9vh auto 0;padding:0 14px;text-align:center}.lg .card{text-align:left}.lo{font-size:50px}
 .bar{height:8px;border-radius:4px;background:var(--pl);margin-top:6px}.bar i{display:block;height:100%;border-radius:4px;background:var(--pr)}
@@ -316,12 +317,13 @@ const API_BASE=(window.OMBOR_API_BASE||'').replace(/\/+$/,'');
 let TOK=null;
 const tokGet=()=>{try{return localStorage.getItem('token')||sessionStorage.getItem('token')}catch(e){return null}};
 const tokSet=(t,rem)=>{TOK=t;try{localStorage.removeItem('token');sessionStorage.removeItem('token');if(t)(rem?localStorage:sessionStorage).setItem('token',t)}catch(e){}};
+const apiErr=m=>{const x=new Error(m);x.api=true;return x};
 async function api(path,method,body){let r;
  try{r=await fetch(API_BASE+'/api'+path,{method:method||'GET',headers:{'Content-Type':'application/json',...(TOK?{Authorization:'Bearer '+TOK}:{})},body:body?JSON.stringify(body):undefined})}
- catch(e){throw new Error("Internet yo'q yoki server javob bermayapti")}
+ catch(e){const x=new Error("Internet yo'q yoki server javob bermayapti");x.offline=true;throw x}
  let j=null;try{j=await r.json()}catch(e){}
- if(r.status==401&&TOK&&!path.startsWith('/auth/login')){logout(true);throw new Error('Qaytadan kiring')}
- if(!r.ok)throw new Error((j&&j.error)||'Xatolik ('+r.status+')');return j}
+ if(r.status==401&&TOK&&!path.startsWith('/auth/login')){logout(true);throw apiErr('Qaytadan kiring')}
+ if(!r.ok)throw apiErr((j&&j.error)||'Xatolik ('+r.status+')');return j}
 const tryA=async fn=>{try{return await fn()}catch(e){toast(e.message);return null}};
 const isA=()=>!!U&&U.role=='admin',canPrice=()=>!!(D&&D.set&&D.set.canPrice);
 /* Faqat shu qurilmaga tegishli sozlamalar: PIN, fon va profil rasmi */
@@ -341,7 +343,72 @@ async function sync(){const a=isA(),st=await api('/settings'),[pr,sl]=await Prom
  D.sales=sl.map(s=>({id:s.id,t:s.createdAt,cust:s.customer,debt:!!s.debt,paid:s.debt?s.debt.paid:false,pay:s.paid,sellerId:s.sellerId,can:!!s.canVoid,items:s.items}));
  D.debts=dbt.map(d=>({id:d.id,t:d.createdAt,sid:d.saleId,name:d.name,amount:d.remaining,total:d.total,ph:d.phone,due:d.due,note:d.note,paid:d.paid}));
  D.exp=ex.slice().reverse().map(e=>({id:e.id,t:e.createdAt,name:e.name,amount:e.amount}));
- D.buys=by.map(b=>({t:b.createdAt,name:b.name,amount:b.amount}))}
+ D.buys=by.map(b=>({t:b.createdAt,name:b.name,amount:b.amount}));applyPending();OFFLINE=false;snapSave()}
+
+/* Xatolarni kuzatish: kutilmagan JS xatolari serverga yuboriladi (u Sentry'ga uzatadi). Parol, telefon, token yuborilmaydi.
+   Internet/API xatolari (kutilgan) yuborilmaydi; sahifada ko'pi bilan 5 ta. */
+(()=>{let n=0;const send=(m,s)=>{if(n>=5||navigator.onLine===false||!m||m=='Script error.')return;n++;
+ try{fetch(API_BASE+'/api/client-error',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({msg:String(m).slice(0,300),stack:String(s||'').slice(0,1500),page:location.pathname})}).catch(()=>{})}catch(e){}};
+ addEventListener('error',e=>send(e.message,e.error&&e.error.stack));
+ addEventListener('unhandledrejection',e=>{const r=e.reason;if(r&&(r.offline||r.api))return;send((r&&r.message)||r,r&&r.stack)})})();
+
+/* ===== OFLAYN REJIM =====
+   Internet uzilsa: ilova oxirgi saqlangan mahsulotlar bilan ochiladi, sotuvlar qurilmada navbatga yoziladi
+   (localStorage, har bir foydalanuvchiga alohida: 'oq:<id>') va internet qaytganda o'zi yuboriladi.
+   Har bir sotuvga noyob clientId beriladi: qayta yuborilsa server ikkinchi marta yozmaydi.
+   Server narxni o'zi hisoblaydi, sotuvchiga ishonilmaydi. Foydalanuvchi ma'lumoti faqat o'z kaliti ostida, boshqasi bilan aralashmaydi. */
+let OFFLINE=false,FLUSHING=false;
+const newCid=()=>{try{if(crypto.randomUUID)return crypto.randomUUID()}catch(e){}return 'c'+Date.now().toString(36)+Math.random().toString(36).slice(2,12)};
+const jget=k=>{try{return JSON.parse(localStorage.getItem(k))}catch(e){return null}},jset=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));return true}catch(e){return false}};
+const qGet=()=>U?(jget('oq:'+U.id)||[]):[],qSet=q=>U&&(q.length?jset('oq:'+U.id,q):localStorage.removeItem('oq:'+U.id));
+const tkFp=()=>TOK?TOK.slice(-16):'';
+/* Profil (/auth/me javobi): faqat shu token egasiga tegishli bo'lsa ishlatiladi */
+const meSave=r=>{jset('om',{fp:tkFp(),me:r})},meLoad=()=>{const o=jget('om');return o&&o.fp&&o.fp==tkFp()?o.me:null};
+/* Ma'lumot nusxasi: mahsulot, qarz, so'nggi sotuvlar. PIN/fon/rasm kirmaydi (ular qurilmaniki, loc() dan qaytadi) */
+function snapSave(){if(!U||!D||OFFLINE)return;const s=Object.assign({},D.set);delete s.bg;delete s.av;delete s.pin;
+ const o={t:Date.now(),fp:tkFp(),set:s,products:D.products,sales:D.sales.slice(-200),debts:D.debts,exp:D.exp.slice(-100),buys:D.buys.slice(-100)};
+ if(!jset('oc:'+U.id,o)){o.sales=o.sales.slice(-30);o.exp=[];o.buys=[];jset('oc:'+U.id,o)}}
+function snapLoad(){const o=U&&jget('oc:'+U.id);if(!o||o.fp!=tkFp())return false;
+ D.set=Object.assign({},o.set,loc());D.products=o.products||[];D.sales=o.sales||[];D.debts=o.debts||[];D.exp=o.exp||[];D.buys=o.buys||[];return true} /* nusxadagi qoldiq allaqachon navbatdagi sotuvlarni hisobga olgan */
+/* Yuborilmagan sotuvlar omborga ta'sir qiladi: mahalliy qoldiqdan ayiramiz (qayta sotib yuborilmasligi uchun) */
+function applyPending(){if(!D)return;for(const s of qGet()){if(s.err)continue;for(const i of s.items){const p=D.products.find(x=>x.id==String(i.productId));if(p)p.qty-=i.qty}}}
+/* Oflayn sotuv: navbatga yozamiz */
+function sellOffline(body){
+ const items=C.map(c=>({productId:+c.id,qty:c.qty,price:c.price,seen:c.price,name:c.name,unit:c.unit}));
+ const rec={cid:body.clientId,t:body.createdAt,customer:body.customer,credit:body.credit,items,total:ctot()};
+ const q=qGet();q.push(rec);if(!qSet(q)||!qGet().some(x=>x.cid==rec.cid)){return toast("Xotira to'la: sotuvni saqlab bo'lmadi. Internet qaytguncha kuting")}
+ for(const i of items){const p=D.products.find(x=>x.id==String(i.productId));if(p)p.qty-=i.qty}
+ C=[];close();cb();snapSaveKeep();tab=='find'?fl():render();obar();
+ modal(`<h3>✅ Sotuv saqlandi</h3><p class="mu">📴 Internet yo'q. Sotuv qurilmada saqlandi va internet qaytganda <b>avtomatik yuboriladi</b>.</p><div class="sp" style="margin:10px 0"><b>${esc(rec.customer||'Mijoz')}</b><b class="pc">${fmt(rec.total)} so'm</b></div><button class="bt" onclick="this.closest('.modal').remove()">Yaxshi</button>`)}
+/* Oflayn paytda ham mahsulot qoldig'i yangi bo'lishi uchun nusxani qo'lda yangilaymiz */
+function snapSaveKeep(){if(!U||!D)return;const o=jget('oc:'+U.id);if(o){o.products=D.products;jset('oc:'+U.id,o)}}
+/* Navbatni yuborish (ketma-ket, vaqt tartibida) */
+async function flushQ(){if(FLUSHING||!U||!TOK||navigator.onLine===false)return;
+ let q=qGet().filter(s=>!s.err);if(!q.length)return;FLUSHING=true;let done=0,warn=[],stop=false;
+ try{for(const s of q){if(!U||!TOK)break;
+  const body={clientId:s.cid,offline:true,createdAt:s.t,customer:s.customer,credit:s.credit,items:s.items.map(i=>({productId:i.productId,qty:i.qty,seen:i.seen,...(canPrice()?{price:i.price}:{})}))};
+  try{const r=await api('/sales','POST',body);done++;if(r&&r.warnings)warn.push(...r.warnings);const cur=qGet().filter(x=>x.cid!=s.cid);qSet(cur)}
+  catch(e){if(e.offline){stop=true;break}
+   const cur=qGet(),x=cur.find(y=>y.cid==s.cid);if(x){x.err=e.message;qSet(cur)}}}
+ }finally{FLUSHING=false}
+ if(done){try{await sync()}catch(e){}OFFLINE=false;if(U&&!$('#md')){tab=='find'?fl():render()}toast(`✅ ${done} ta oflayn sotuv yuborildi`);if(warn.length)setTimeout(()=>{if(U)modal(`<h3>⚠️ Diqqat</h3><p class="mu">Oflayn sotuvlarda e'tibor talab qiladigan holatlar:</p>${warn.slice(0,10).map(w=>`<p>• ${esc(w)}</p>`).join('')}<button class="bt" onclick="this.closest('.modal').remove()">Tushunarli</button>`)},300)}
+ obar()}
+/* Yuqoridagi holat belgisi: oflayn / yuborilmagan sotuvlar */
+function obar(){let b=$('#ob');if(!U){b&&b.remove();return}
+ const n=qGet().length,off=navigator.onLine===false||OFFLINE;
+ if(!off&&!n){b&&b.remove();return}
+ if(!b){b=document.createElement('button');b.id='ob';b.onclick=qView;document.body.appendChild(b)}
+ b.className='ob'+(off?' off':'');b.textContent=(off?"📴 Oflayn":'🔄 Yuborilmoqda')+(n?` · ${n} ta sotuv kutmoqda`:'')}
+function qView(){const q=qGet();if(!q.length)return toast(navigator.onLine===false||OFFLINE?"📴 Internet yo'q. Sotish ishlaydi, sotuvlar keyin yuboriladi":'Hammasi yuborilgan ✅');
+ modal(`<h3>⏳ Yuborilmagan sotuvlar</h3>${navigator.onLine===false?`<p class="mu">📴 Internet yo'q. Qaytganda avtomatik yuboriladi.</p>`:''}${q.map(s=>`<div class="sp" style="margin:10px 0;padding-top:8px;border-top:1px solid var(--bd)"><div><b>${esc(s.customer||'Mijoz')}</b><div class="mu">${dt(s.t)} · ${s.items.map(i=>esc(i.name)+' ×'+i.qty).join(', ').slice(0,80)}</div>${s.err?`<div class="rd" style="font-size:13px">❌ ${esc(s.err)}</div>`:''}</div><div style="text-align:right"><b>${fmt(s.total)}</b><br><button class="r" style="padding:3px 9px;margin-top:4px" onclick="qDel('${s.cid}')">✕</button></div></div>`).join('')}
+ <button class="bt" onclick="qRetry()">Hozir yuborish</button>`)}
+function qDel(cid){const s=qGet().find(x=>x.cid==cid);if(!s)return;if(!confirm("Bu sotuv o'chirilsinmi? U serverga yuborilmaydi."))return;
+ if(!s.err)for(const i of s.items){const p=D.products.find(x=>x.id==String(i.productId));if(p)p.qty+=i.qty}
+ qSet(qGet().filter(x=>x.cid!=cid));snapSaveKeep();obar();close();tab=='find'?fl():render();if(qGet().length)qView()}
+function qRetry(){qSet(qGet().map(s=>{delete s.err;return s}));close();toast('Yuborilmoqda...');flushQ()}
+addEventListener('online',()=>{obar();flushQ()});addEventListener('offline',()=>{obar();toast("📴 Internet uzildi. Sotish davom etadi")});
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)flushQ()});
+setInterval(()=>{if(U&&qGet().some(s=>!s.err))flushQ()},30000);
 
 /* --- Kirish / chiqish --- */
 async function finishAuth(r,rem){tokSet(r.token,rem);await enter(r)}
@@ -360,10 +427,11 @@ async function doResetConfirm(){const er=$('#er'),ph=$('#ph').value,cd=$('#cd').
  try{const r=await api('/auth/reset/confirm','POST',{phone:ph,code:cd,password:pw});loginV(0);$('#ph').value=r.loginId;
   $('#er').insertAdjacentHTML('beforebegin',`<p class="gn" style="font-weight:600">✅ Parol yangilandi. Sizning ID raqamingiz: <b>${esc(r.loginId)}</b></p>`);$('#pw').focus()}catch(e){er.textContent=e.message}}
 async function enter(r){U={id:r.user.id,phone:r.user.phone,role:r.user.role,uname:r.user.name,loginId:r.user.loginId,name:r.shop.name};D={products:[],sales:[],buys:[],debts:[],exp:[],set:{}};C=[];
- try{await sync()}catch(e){loginV(0);setTimeout(()=>{const x=$('#er');x&&(x.textContent=e.message)},0);return}
+ try{await sync()}catch(e){if(e.offline&&snapLoad()){OFFLINE=true}else{loginV(0);setTimeout(()=>{const x=$('#er');x&&(x.textContent=e.message)},0);return}}
+ meSave(r);
  let l='';try{l=localStorage.getItem('lang')}catch(e){}setLang(l||D.set.lang||'uz');bg();
- if(D.set.pin)return lock();tab='home';sub=null;render();notif();migrateOffer()}
-function logout(silent){tokSet(null);U=null;D=null;C=[];document.body.style.backgroundImage='';loginV(0);if(silent===true)toast('Qaytadan kiring')}
+ if(D.set.pin)return lock();tab='home';sub=null;render();notif();if(!OFFLINE)migrateOffer();obar();flushQ()}
+function logout(silent){tokSet(null);U=null;D=null;C=[];obar();document.body.style.backgroundImage='';loginV(0);if(silent===true)toast('Qaytadan kiring')}
 async function chPw(){const v=$('#np').value;if(v.length<6)return toast('Kamida 6 belgi');const rem=(()=>{try{return !!localStorage.getItem('token')}catch(e){return false}})();
  const r=await tryA(()=>api('/auth/password','POST',{current:$('#cp').value,password:v}));if(r){if(r.token)tokSet(r.token,rem);close();toast("Parol o'zgardi ✅")}}
 
@@ -391,7 +459,10 @@ function xf(id){const p=D.products.find(x=>x.id==id),q=+$('#xq').value||0,pr=+$(
 /* --- Sotish --- */
 async function doSell(){const debt=$('#xd').checked,nm=$('#xc').value.trim();if(debt&&!nm)return toast('Nasiyada mijoz ismini kiriting');
  const body={customer:nm,items:C.map(c=>({productId:+c.id,qty:c.qty,...(canPrice()?{price:c.price}:{})})),credit:debt?{paidNow:+$('#xa').value||0,phone:$('#xt').value.trim(),due:$('#xu').value}:null};
- const r=await tryA(()=>api('/sales','POST',body));if(!r)return;C=[];await tryA(sync);cb();tab=='find'?fl():render();sd(r.id)}
+ body.clientId=newCid();body.createdAt=Date.now();
+ if(navigator.onLine===false)return sellOffline(body);
+ let r;try{r=await api('/sales','POST',body)}catch(e){if(e.offline)return sellOffline(body);return toast(e.message)}
+ C=[];await tryA(sync);cb();tab=='find'?fl():render();sd(r.id);if(r.warnings&&r.warnings.length)toast('⚠️ '+r.warnings[0])}
 function paySale(id){const d=D.debts.find(x=>x.sid==id);if(d)payM(d.id)}
 
 /* --- Qarzlar --- */
@@ -408,6 +479,15 @@ async function addExp(){const n=$('#en').value.trim(),a=+$('#ea').value;if(!n||!
 async function delExp(id){if(!(await tryA(()=>api('/expenses/'+id,'DELETE'))))return;await tryA(sync);expV()}
 
 /* --- Xodimlar (faqat admin) --- */
+/* Faoliyat tarixi (admin): kim, qachon, nima qilgani. Faqat o'qiladi. */
+const AUE=[['','Hammasi'],['product','📦 Mahsulot'],['sale','🧾 Sotuv'],['debt','💵 Qarz'],['expense','💸 Xarajat'],['settings','⚙️ Sozlama'],['staff','👥 Xodim'],['auth','🔐 Xavfsizlik']],AUI={product:'📦',sale:'🧾',debt:'💵',expense:'💸',settings:'⚙️',staff:'👥',auth:'🔐'};
+let AUD={items:[],ent:'',more:false};
+async function auditV(ent){if(typeof ent=='string')AUD.ent=ent;else AUD.ent='';const r=await tryA(()=>api('/audit?limit=50'+(AUD.ent?'&entity='+AUD.ent:'')));if(!r)return;AUD.items=r;AUD.more=r.length==50;auditDraw()}
+async function auditMore(){const l=AUD.items[AUD.items.length-1];if(!l)return;const r=await tryA(()=>api('/audit?limit=50&before='+l.id+(AUD.ent?'&entity='+AUD.ent:'')));if(!r)return;AUD.items=AUD.items.concat(r);AUD.more=r.length==50;auditDraw()}
+function auditDraw(){modal(`<h3>📜 Faoliyat tarixi</h3><p class="mu">Kim, qachon, nima qilgani. Tarixni o'zgartirib bo'lmaydi.</p>
+ <select id="ae" onchange="auditV(this.value)">${AUE.map(x=>`<option value="${x[0]}"${AUD.ent==x[0]?' selected':''}>${x[1]}</option>`).join('')}</select>
+ ${AUD.items.length?AUD.items.map(a=>`<div style="padding:9px 0;border-top:1px solid var(--bd)"><div>${AUI[a.entity]||'•'} ${esc(a.summary)}</div><div class="mu" style="font-size:13px">${esc(a.userName||'—')} · ${dt(a.createdAt)}</div></div>`).join(''):'<p class="mu" style="text-align:center;margin:20px 0">Hali yozuv yo\'q</p>'}
+ ${AUD.more?'<button class="g" style="width:100%;margin-top:10px" onclick="auditMore()">Yana ko\'rsatish</button>':''}`)}
 async function staffV(){window.CRED='';const L=await tryA(()=>api('/staff'));if(!L)return;
  modal(`<h3>👥 Xodimlar</h3><p class="mu">Xodim ismini kiriting: tizim unga 6 xonali ID va parol beradi. Xodim shu bilan kiradi va parolni o'zi o'zgartira oladi. U faqat sotadi: tannarx va foydani ko'rmaydi.</p>
  <div class="card"><label>Ism</label><input id="sfn"><button class="bt" style="margin:0" onclick="addStaff()">+ Xodim qo'shish</button></div>
@@ -433,7 +513,7 @@ function meV(){const a=isA(),H=n=>hide?'••••••':fmt(n);let fin='';
  if(a){const cost=D.products.reduce((x,p)=>x+p.cost*p.qty,0),val=D.products.reduce((x,p)=>x+sp(p)*p.qty,0),bought=D.buys.reduce((x,b)=>x+b.amount,0),fy=D.sales.reduce((x,s)=>x+prof(s),0);
   fin=`<div class="bal"><div style="opacity:.8">Ombordagi summa</div><b>${H(cost)} so'm <button onclick="hide=!hide;meV()" style="font-size:22px">${hide?'🙈':'👁'}</button></b><div style="opacity:.8;margin-top:8px;font-size:13px">Sotilsa: ${H(val)} so'm</div></div>
  <div class="stats" style="margin-bottom:14px"><div class="st">Jami olingan tovar<b>${H(bought)}</b></div><div class="st">Olingan sof foyda<b class="gn">${H(fy-D.exp.reduce((x,e)=>x+e.amount,0))}</b></div></div>`}
- const M=a?[['💸','Xarajatlar','expV()'],['👥','Xodimlar','staffV()'],['📊','Excelga yuklash','csvV()'],['🛡','Xavfsizlik','secV()'],['⚙️','Sozlamalar','setV()'],['ℹ️','Ilova haqida','aboutV()']]:[['🛡','Xavfsizlik','secV()'],['⚙️','Sozlamalar','setV()'],['ℹ️','Ilova haqida','aboutV()']];
+ const M=a?[['💸','Xarajatlar','expV()'],['👥','Xodimlar','staffV()'],['📜','Faoliyat tarixi','auditV()'],['📊','Excelga yuklash','csvV()'],['🛡','Xavfsizlik','secV()'],['⚙️','Sozlamalar','setV()'],['ℹ️','Ilova haqida','aboutV()']]:[['🛡','Xavfsizlik','secV()'],['⚙️','Sozlamalar','setV()'],['ℹ️','Ilova haqida','aboutV()']];
  V(`<div class="top">${av()}<div><b class="nm">${esc(U.name)}</b><div class="sb">${esc(U.uname)} · ${a?'ADMIN':'SOTUVCHI'}</div><div class="sb">ID: ${esc(U.loginId||'')}</div></div></div>${fin}
  ${M.map(m=>`<button class="card mi" onclick="${m[2]}"><i>${m[0]}</i><b>${m[1]}</b><span class="mu">›</span></button>`).join('')}
  <button class="rd" style="display:block;margin:18px auto;font-weight:700" onclick="logout()">⎋ Chiqish</button>`)}
@@ -452,7 +532,7 @@ async function phStart(){const er=$('#er');er.textContent='';try{await api('/aut
 async function phConfirm(){const er=$('#er');er.textContent='';try{const r=await api('/auth/phone/confirm','POST',{phone:$('#npn').value,code:$('#pcd').value.trim()});U.phone=r.phone;close();toast("Raqam o'zgardi ✅")}catch(e){er.textContent=e.message}}
 function delAccV(){modal(`<h3>Hisobni o'chirish</h3><p class="rd" style="font-weight:600">Diqqat: do'kon, barcha mahsulotlar, sotuvlar, qarzlar va xodimlar butunlay o'chadi. Buni qaytarib bo'lmaydi.</p><p class="mu">Davom etish uchun parolingizni kiriting.</p><label>Parol</label><input id="dpw" type="password"><p id="er" class="rd"></p><button class="r" style="width:100%" onclick="delAcc()">Hisobni o'chirish</button>`)}
 async function delAcc(){const er=$('#er');if(!confirm("Hisob va barcha ma'lumotlar butunlay o'chiriladi. Rostdan ham o'chiraylikmi?"))return;
- try{await api('/auth/delete-account','POST',{password:$('#dpw').value});try{localStorage.removeItem('loc:'+U.id)}catch(e){}close();logout();toast("Hisob o'chirildi")}catch(e){er.textContent=e.message}}
+ try{await api('/auth/delete-account','POST',{password:$('#dpw').value});try{localStorage.removeItem('loc:'+U.id);localStorage.removeItem('oq:'+U.id);localStorage.removeItem('oc:'+U.id);localStorage.removeItem('om')}catch(e){}close();logout();toast("Hisob o'chirildi")}catch(e){er.textContent=e.message}}
 function setV(){const s=D.set,a=isA(),F=(t,k,m)=>`<label class="g" style="display:block;text-align:center;cursor:pointer">${t}<input type="file" accept="image/*" hidden onchange="pic(this.files[0],${m},'${k}')"></label>`;
  modal(`<h3>Sozlamalar</h3>${a?`<label>Biznes nomi</label><input id="sn" value="${esc(U.name)}">`:''}
  <label>Til</label><select id="sl"><option value="uz">O'zbekcha</option><option value="ru">Русский</option><option value="en">English</option></select>
@@ -474,6 +554,7 @@ async function saveSet(){const lang=$('#sl').value;
 /* ===== ISHGA TUSHIRISH ===== */
 (async()=>{try{setLang(localStorage.getItem('lang')||'uz')}catch(e){}
  TOK=tokGet();if(!TOK)return loginV(0);
- try{await enter(await api('/auth/me'))}catch(e){if(!$('.lg'))loginV(0)}})();
+ try{let me;try{me=await api('/auth/me')}catch(e){me=e.offline?meLoad():null;if(!me){if(e.offline)setTimeout(()=>toast(e.message),50);throw e}OFFLINE=true}
+  await enter(me)}catch(e){if(!$('.lg'))loginV(0)}})();
 
 </script></body></html>

@@ -2,6 +2,7 @@
 // Jadvallar (migratsiya) har bir "sovuq start"da bir marta tekshiriladi.
 const { createApp } = require('../src/app');
 const { migrate } = require('../src/db');
+const monitor = require('../src/monitor');
 
 const app = createApp();
 let ready;
@@ -12,6 +13,7 @@ module.exports = async (req, res) => {
   } catch (e) {
     ready = null;
     console.error('Migratsiya xatosi:', e);
+    monitor.init(); monitor.capture(e); await monitor.flush();
     return res.status(500).json({ error: 'Baza bilan bog\'lanib bo\'lmadi' });
   }
   return app(req, res);

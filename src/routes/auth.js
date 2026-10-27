@@ -4,11 +4,12 @@ const { db } = require('../db');
 const { sign, auth, adminOnly } = require('../auth');
 const { ApiError, h, str, userPhone, phoneForms, randomLoginId, idOf, now } = require('../util');
 const otp = require('../otp');
+const lockout = require('../lockout');
+const { audit, who, maskPhone } = require('../audit');
 
 const r = express.Router();
 const pub = (u) => ({ id: u.id, name: u.name, phone: u.phone || null, role: u.role, loginId: u.login_id || u.loginId });
 
-const MAX_FAILS = 8, LOCK_MS = 15 * 60 * 1000;
 const DUMMY_HASH = bcrypt.hashSync('dummy-password', 10); // foydalanuvchi topilmasa ham bir xil vaqt ketsin
 const pwOk = (pw) => { if (String(pw || '').length < 6) throw new ApiError(400, "Parol kamida 6 belgi bo'lsin"); return String(pw); };
 
@@ -56,18 +57,14 @@ r.post('/login', h(async (req, res) => {
   if (raw.length === 6) u = await db('users').where({ login_id: raw }).first();
   else if (raw.length >= 9) u = await db('users').whereIn('phone', phoneForms(raw.length === 9 ? '998' + raw : raw)).first();
   const bad = new ApiError(401, "ID yoki parol noto'g'ri");
-  if (u && u.locked_until && u.locked_until > now()) {
-    throw new ApiError(429, `Juda ko'p xato urinish. ${Math.ceil((u.locked_until - now()) / 60000)} daqiqadan keyin qayta urinib ko'ring`);
-  }
+  // Bloklash (foydalanuvchi + IP) juftligi bo'yicha: birovning ID sini terib uni to'sib bo'lmaydi (src/lockout.js)
+  if (u) await lockout.check(u.id, req.ip);
   const match = await bcrypt.compare(String(req.body.password || ''), u ? u.password_hash : DUMMY_HASH);
   if (!u || !u.active || !match) {
-    if (u && u.active && !match) {
-      const f = (u.failed_logins || 0) + 1;
-      await db('users').where({ id: u.id }).update(f >= MAX_FAILS ? { failed_logins: 0, locked_until: now() + LOCK_MS } : { failed_logins: f });
-    }
+    if (u && u.active && !match) await lockout.fail(u.id, req.ip);
     throw bad;
   }
-  if (u.failed_logins || u.locked_until) await db('users').where({ id: u.id }).update({ failed_logins: 0, locked_until: null });
+  await lockout.succeed(u.id, req.ip);
   const shop = await db('shops').where({ id: u.shop_id }).first();
   res.json({ token: sign(u), user: pub(u), shop: { id: shop.id, name: shop.name } });
 }));
@@ -83,6 +80,7 @@ r.post('/password', auth, h(async (req, res) => {
   if (!(await bcrypt.compare(String(req.body.current || ''), u.password_hash))) throw new ApiError(400, "Joriy parol noto'g'ri");
   const pw = pwOk(req.body.password);
   await db('users').where({ id: u.id }).update({ password_hash: await bcrypt.hash(pw, 10), token_version: db.raw('token_version + 1') });
+  await audit(who(req), { action: 'auth.password', entity: 'auth', entityId: u.id, summary: "Parol o'zgartirildi" });
   // Eski tokenlar bekor bo'ladi, shu qurilma uchun yangisini beramiz
   res.json({ ok: true, token: sign(await db('users').where({ id: u.id }).first()) });
 }));
@@ -106,6 +104,8 @@ r.post('/reset/confirm', h(async (req, res) => {
   await db('users').where({ id: u.id }).update({
     password_hash: await bcrypt.hash(pw, 10), token_version: db.raw('token_version + 1'), failed_logins: 0, locked_until: null, phone_verified: true,
   });
+  await lockout.clearUser(u.id);
+  await audit({ shopId: u.shop_id, userId: u.id, userName: u.name, ip: req.ip }, { action: 'auth.reset', entity: 'auth', entityId: u.id, summary: 'Parol SMS kod orqali tiklandi' });
   res.json({ ok: true, loginId: u.login_id }); // ID unutilgan bo'lsa ham shu yerda ko'rsatiladi
 }));
 
@@ -124,7 +124,9 @@ r.post('/phone/confirm', auth, adminOnly, h(async (req, res) => {
   const ph = userPhone(req.body.phone);
   await otp.check(ph, 'phone', req.body.code, req.user.id);
   if (await phoneTaken(ph)) throw new ApiError(409, 'Bu raqam band');
+  const oldPhone = (await db('users').where({ id: req.user.id }).first()).phone;
   await db('users').where({ id: req.user.id }).update({ phone: ph, phone_verified: true });
+  await audit(who(req), { action: 'auth.phone', entity: 'auth', entityId: req.user.id, summary: `Telefon raqam almashtirildi: ${maskPhone(oldPhone)} → ${maskPhone(ph)}` });
   res.json({ ok: true, phone: ph });
 }));
 

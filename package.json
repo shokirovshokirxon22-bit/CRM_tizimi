@@ -6,12 +6,13 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
-    "test": "node test/smoke.js && node test/regress.js && node test/auth.js && node test/sms_limit.js && node test/void.js && node test/migrate.js && node test/ui.js"
+    "test": "node test/smoke.js && node test/regress.js && node test/auth.js && node test/sms_limit.js && node test/void.js && node test/offline.js && node test/lockout.js && node test/audit.js && node test/monitor.js && node test/migrate.js && node test/ui.js && node test/offline_ui.js && node test/audit_ui.js"
   },
   "engines": {
     "node": ">=18"
   },
   "dependencies": {
+    "@sentry/node": "^11.9.0",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",

@@ -2,6 +2,7 @@ const express = require('express');
 const { db } = require('../db');
 const { auth, adminOnly, superOnly } = require('../auth');
 const { ApiError, h, num, str, idOf, now } = require('../util');
+const { audit, who } = require('../audit');
 
 const DEF = { lang: 'uz', sms: false, days: 0, tpl: "Assalomu alaykum, {ism}! {biznes} oldidagi {summa} so'm qarzingiz muddati {sana} da tugaydi. Iltimos, to'lovni amalga oshiring." };
 const parseS = (s) => { try { return { ...DEF, ...(JSON.parse(s) || {}) }; } catch { return { ...DEF }; } };
@@ -25,6 +26,11 @@ settings.put('/', adminOnly, h(async (req, res) => {
   if (b.tpl !== undefined) n.tpl = str(b.tpl, { max: 500 }) || DEF.tpl;
   upd.settings = JSON.stringify(n);
   await db('shops').where({ id: s.id }).update(upd);
+  const L = { shopName: 'do\'kon nomi', sellerEditPrice: 'sotuvchi narxni o\'zgartira oladi', sellerSeeDebts: 'sotuvchi qarzlarni ko\'radi', lang: 'til', sms: 'SMS eslatma', days: 'eslatma kuni', tpl: 'SMS matni' };
+  const was = { shopName: s.name, sellerEditPrice: !!s.seller_edit_price, sellerSeeDebts: !!s.seller_see_debts, lang: cur.lang, sms: !!cur.sms, days: cur.days, tpl: cur.tpl };
+  const now_ = { shopName: upd.name !== undefined ? upd.name : s.name, sellerEditPrice: upd.seller_edit_price !== undefined ? upd.seller_edit_price : !!s.seller_edit_price, sellerSeeDebts: upd.seller_see_debts !== undefined ? upd.seller_see_debts : !!s.seller_see_debts, lang: n.lang, sms: !!n.sms, days: n.days, tpl: n.tpl };
+  const diff = Object.keys(was).filter((k) => was[k] !== now_[k]);
+  if (diff.length) await audit(who(req), { action: 'settings.update', entity: 'settings', summary: 'Sozlama: ' + diff.map((k) => k === 'tpl' ? L[k] + " o'zgartirildi" : `${L[k]}: ${was[k]} → ${now_[k]}`).join(', '), data: { changes: Object.fromEntries(diff.filter((k) => k !== 'tpl').map((k) => [k, [was[k], now_[k]]])) } });
   res.json({ ok: true });
 }));
 
@@ -38,11 +44,14 @@ expenses.post('/', h(async (req, res) => {
   const amount = num(req.body.amount, { min: 0.0001 });
   if (amount === undefined) throw new ApiError(400, 'Summani kiriting');
   const id = idOf(await db('expenses').insert({ shop_id: req.user.shopId, name: str(req.body.name, { req: true, max: 100 }), amount, created_at: now() }).returning('id'));
+  await audit(who(req), { action: 'expense.create', entity: 'expense', entityId: id, summary: `Xarajat qo'shildi: ${str(req.body.name, { max: 100 })}, ${amount} so'm` });
   res.status(201).json({ id });
 }));
 expenses.delete('/:id', h(async (req, res) => {
+  const old = await db('expenses').where({ id: +req.params.id, shop_id: req.user.shopId }).first();
   const n = await db('expenses').where({ id: +req.params.id, shop_id: req.user.shopId }).del();
   if (!n) throw new ApiError(404, 'Topilmadi');
+  await audit(who(req), { action: 'expense.delete', entity: 'expense', entityId: old.id, summary: `Xarajat o'chirildi: ${old.name}, ${old.amount} so'm` });
   res.json({ ok: true });
 }));
 
