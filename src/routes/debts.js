@@ -9,11 +9,10 @@ const view = (d) => ({
   due: d.due || '', note: d.note || '', paid: !!d.paid, createdAt: d.created_at,
 });
 
-// Admin har doim; sotuvchi faqat admin ruxsat bergan bo'lsa (shops.seller_see_debts)
+// Admin har doim; sotuvchi faqat ruxsat berilgan bo'lsa (hamma sotuvchiga yoki shu sotuvchining o'ziga)
 r.use(h(async (req, res, next) => {
   if (req.user.role === 'admin') return next();
-  const shop = await db('shops').where({ id: req.user.shopId }).first();
-  if (!shop.seller_see_debts) throw new ApiError(403, 'Qarzdorlar bo\'limi sizga yopiq');
+  if (!(await require('../perms').perms(req.user)).debts) throw new ApiError(403, 'Qarzdorlar bo\'limi sizga yopiq');
   next();
 }));
 

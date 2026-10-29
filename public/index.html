@@ -9,11 +9,16 @@
 <style>
 :root{--ov:#f4f5fbd9;--bg:#f4f5fb;--cd:#fff;--tx:#161a2e;--mu:#8a8fa6;--pr:#6c5ce7;--pl:#ecebff;--bd:#e6e8f2;--in:#f1f2f7;--rd:#e5484d;--gn:#16a34a;--or:#f59e0b;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
 :root[data-theme=dark]{--ov:#0f1220d9;--bg:#0f1220;--cd:#191d30;--tx:#eef0fa;--mu:#8e94b0;--pr:#8b7dff;--pl:#26264a;--bd:#2a2f48;--in:#222744}
-*{box-sizing:border-box}html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}html{scroll-padding-top:env(safe-area-inset-top,0px);-webkit-text-size-adjust:100%;text-size-adjust:100%;overflow-x:hidden}
 body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
 [hidden]{display:none!important}button{border:0;font:inherit;cursor:pointer;color:inherit;background:none}
 input,select{width:100%;padding:13px;border:1px solid transparent;border-radius:12px;background:var(--in);color:var(--tx);font:inherit;margin:4px 0 12px;outline:0}
 input:focus{border-color:var(--pr)}
+input,select{min-width:0;max-width:100%}
+input[type=date]{-webkit-appearance:none;appearance:none;display:block;min-height:50px;text-align:left}
+input[type=date]::-webkit-date-and-time-value{text-align:left;min-height:1.4em}
+/* iOS: shrift 16px dan kichik bo'lsa, input bosilganda sahifa o'zi zoom qiladi va qaytmaydi */
+@media(hover:none) and (pointer:coarse){input,select{font-size:16px}}
 label{font-size:12px;font-weight:600;color:var(--mu);letter-spacing:.3px}
 .ck{display:flex;gap:8px;align-items:center;font-size:14px;color:var(--tx);margin-bottom:10px}.ck input{width:auto;margin:0}
 h2{margin:0;font-size:22px}h3{margin:0 0 4px}
@@ -26,7 +31,7 @@ nav button span{font-size:20px}nav button.on{background:var(--pl);color:var(--pr
 :root[data-theme=dark] .bt{color:#10102a}
 .g{background:var(--pl);color:var(--pr);border-radius:12px;padding:11px 14px;font-weight:600}
 .r{background:transparent;color:var(--rd);border:1px solid var(--rd);border-radius:12px;padding:11px 14px;font-weight:600}
-.row{display:flex;gap:10px}.row>*{flex:1}.sp{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.row{display:flex;gap:10px}.row>*{flex:1;min-width:0}.sp{display:flex;justify-content:space-between;align-items:center;gap:8px}
 .mu{color:var(--mu);font-size:13px}.rd{color:var(--rd)}.gn{color:var(--gn)}.or{color:var(--or);font-size:13px;font-weight:600;margin-top:2px}.pc{color:var(--pr);white-space:nowrap}
 .hd{display:flex;align-items:center;gap:10px;margin:6px 0 14px}
 .ic{width:42px;height:42px;border-radius:50%;background:var(--cd);border:1px solid var(--bd);font-size:18px;flex:none}
@@ -155,10 +160,19 @@ function pv(){const g=i=>+(($('#'+i)||{}).value)||0,c=g('fc'),q=g('fq'),w=g('fw'
  $('#pvw').innerHTML=R(`Sotish narxi (${UL[AU]}):`,fmt(s))+(AU=='m'?R('Sotish narxi (m²):',w?fmt(s/w):0):'')+'<hr>'+R('Olingan umumiy summa:',fmt(c*q))+R('Sotilsa umumiy summa:',fmt(s*q))+R('Sof foyda:',fmt((s-c)*q),'gn')}
 /* --- Qidiruv + sotish --- */
 function findV(){V(hd('Mahsulotlar Ombori')+`<div class="row" style="align-items:center"><input class="srch" id="q" placeholder="🔍  Mahsulot qidirish..." oninput="fl()" onkeydown="if(event.key=='Enter')qe()"><button class="ic" style="flex:none;width:50px;height:50px" onclick="scanSell()">📷</button></div><button class="bt" style="margin:0 0 12px" onclick="scanSell()">📷 Tez sotish (skanerlash)</button><div id="res" class="list"></div>`);fl()}
-function fl(){const q=$('#q').value.toLowerCase();$('#res').innerHTML=D.products.filter(p=>p.name.toLowerCase().includes(q)||(p.bc&&p.bc==q)).map(p=>`<div class="card pr ${low(p)?'low':''}" onclick="pm('${p.id}')"><span class="pi">${IC[p.unit]}</span><div><b>${esc(p.name)}</b><div class="mu">Qolgan: ${p.qty} ${UL[p.unit]}</div></div><b class="pc">${fmt(sp(p))} so'm</b>${isA()?`<button class="ic" style="width:38px;height:38px;font-size:15px" onclick="event.stopPropagation();ED='${p.id}';tab='add';render()">✏️</button>`:''}</div>`).join('')||'<p class="mu">Mahsulot topilmadi. "Kiritish" bo\'limidan qo\'shing.</p>'}
+function fl(){const q=$('#q').value.toLowerCase();$('#res').innerHTML=D.products.filter(p=>p.name.toLowerCase().includes(q)||(p.bc&&p.bc==q)).map(p=>`<div class="card pr ${low(p)?'low':''}" onclick="pm('${p.id}')"><span class="pi">${IC[p.unit]}</span><div><b>${esc(p.name)}</b><div class="mu">Qolgan: ${p.qty} ${UL[p.unit]}</div></div><b class="pc">${fmt(sp(p))} so'm</b>${isA()?`<button class="ic" style="width:38px;height:38px;font-size:15px" onclick="event.stopPropagation();ED='${p.id}';tab='add';render()">✏️</button>`:canPrice()?`<button class="ic" style="width:38px;height:38px;font-size:15px" onclick="event.stopPropagation();priceM('${p.id}')">✏️</button>`:''}</div>`).join('')||'<p class="mu">Mahsulot topilmadi. "Kiritish" bo\'limidan qo\'shing.</p>'}
+function priceM(id){const p=D.products.find(x=>x.id==id);if(!p)return;
+ modal(`<h3>✏️ ${esc(p.name)}</h3><p class="mu">Sotish narxini o'zgartirish (${UL[p.unit]} uchun). Yangi narx keyingi sotuvlarda hamma uchun amal qiladi.</p>
+ <label>Sotish narxi (${UL[p.unit]})</label><input id="np" type="number" inputmode="decimal" value="${Math.round(sp(p))}">
+ <div class="row"><button class="g" onclick="close()">Bekor</button><button class="bt" style="margin:0" onclick="savePrice('${id}')">Saqlash</button></div>`);
+ setTimeout(()=>{const e=$('#np');e&&e.focus()},80)}
+async function savePrice(id){const v=+$('#np').value;if(!(v>0))return toast('Narxni kiriting');
+ const r=await tryA(()=>api('/products/'+id+'/price','PUT',{price:v}));if(!r)return;
+ const p=D.products.find(x=>x.id==id);if(p){p.sell=r.sellPrice;if(r.cost!=null){p.cost=r.cost;p.pct=r.pct}}
+ close();fl();toast('Narx yangilandi ✅')}
 function pm(id,qs){QS=!!qs;const p=D.products.find(x=>x.id==id);
  modal(`<h3>${esc(p.name)}</h3><p class="mu">Qolgan: ${p.qty} ${UL[p.unit]}${isA()?` · Olingan: ${fmt(p.cost)} · +${p.pct}%`:''}</p>
- <div class="row"><div><label>Sotish narxi (${UL[p.unit]})</label><input id="xp" type="number" ${canPrice()?'':'readonly'} value="${Math.round(sp(p))}" oninput="xf('${id}')"></div><div><label>Miqdor (${UL[p.unit]})</label><input id="xq" type="number" step="any" oninput="xf('${id}')"></div></div>
+ <div class="row"><div><label>Sotish narxi (${UL[p.unit]})${canPrice()?' ✏️':''}</label><input id="xp" type="number" ${canPrice()?'':'readonly'} value="${Math.round(sp(p))}" oninput="xf('${id}')"></div><div><label>Miqdor (${UL[p.unit]})</label><input id="xq" type="number" step="any" oninput="xf('${id}')"></div></div>
  
  <p id="xi" class="mu"></p><div class="row"><button class="g" onclick="addC('${id}')">Savatga qo'shish</button><button class="bt" style="margin:0" onclick="addC('${id}',1)">Sotish</button></div>
  `);if(p.unit=='dona'){$('#xq').value=1;xf(id)}setTimeout(()=>{const e=$('#xq');e&&e.focus()},80)}
@@ -335,10 +349,10 @@ async function loadSales(){let all=[],before='';
  for(let i=0;i<20;i++){const b=await api('/sales?limit=1000'+(before?'&before='+before:''));all=all.concat(b);if(b.length<1000)break;before=b[b.length-1].createdAt}
  return all.reverse()}
 /* Serverdan hamma ma'lumotni olib, eski interfeys kutgan shaklga o'tkazadi. Sotuvchiga cost/pct/foyda umuman kelmaydi. */
-async function sync(){const a=isA(),st=await api('/settings'),[pr,sl]=await Promise.all([api('/products'),loadSales()]),seeD=a||st.sellerSeeDebts;
+async function sync(){const a=isA(),st=await api('/settings'),[pr,sl]=await Promise.all([api('/products'),loadSales()]),seeD=a||st.mySeeDebts;
  const [dbt,ex,by]=await Promise.all([seeD?api('/debts'):[],a?api('/expenses'):[],a?api('/buys'):[]]);
  U.name=st.shopName;
- D.set=Object.assign({lang:st.lang,sms:st.sms,days:st.days,tpl:st.tpl,canPrice:a||st.sellerEditPrice,editPrice:!!st.sellerEditPrice,seeDebts:!!seeD,debtFlag:!!st.sellerSeeDebts},loc());
+ D.set=Object.assign({lang:st.lang,sms:st.sms,days:st.days,tpl:st.tpl,canPrice:a||!!st.myEditPrice,editPrice:!!st.sellerEditPrice,seeDebts:!!seeD,debtFlag:!!st.sellerSeeDebts},loc());
  D.products=pr.map(p=>({id:String(p.id),name:p.name,unit:p.unit,cost:p.cost,pct:p.pct,qty:p.qty,min:p.min,bc:p.barcode,w:p.width,sell:p.sellPrice}));
  D.sales=sl.map(s=>({id:s.id,t:s.createdAt,cust:s.customer,debt:!!s.debt,paid:s.debt?s.debt.paid:false,pay:s.paid,sellerId:s.sellerId,can:!!s.canVoid,items:s.items}));
  D.debts=dbt.map(d=>({id:d.id,t:d.createdAt,sid:d.saleId,name:d.name,amount:d.remaining,total:d.total,ph:d.phone,due:d.due,note:d.note,paid:d.paid}));
@@ -491,7 +505,8 @@ function auditDraw(){modal(`<h3>📜 Faoliyat tarixi</h3><p class="mu">Kim, qach
 async function staffV(){window.CRED='';const L=await tryA(()=>api('/staff'));if(!L)return;
  modal(`<h3>👥 Xodimlar</h3><p class="mu">Xodim ismini kiriting: tizim unga 6 xonali ID va parol beradi. Xodim shu bilan kiradi va parolni o'zi o'zgartira oladi. U faqat sotadi: tannarx va foydani ko'rmaydi.</p>
  <div class="card"><label>Ism</label><input id="sfn"><button class="bt" style="margin:0" onclick="addStaff()">+ Xodim qo'shish</button></div>
- ${L.filter(u=>u.role=='seller').map(u=>`<div class="card"><div><b>${esc(u.name)}</b><div class="mu">ID: ${esc(u.loginId)}${u.active?'':" · ⛔ o'chirilgan"}</div></div><div class="row" style="margin-top:8px"><button class="g" onclick="pwStaff(${u.id})">🔑 Yangi parol</button><button class="${u.active?'r':'g'}" onclick="togStaff(${u.id},${!u.active})">${u.active?"O'chirish":'Yoqish'}</button></div></div>`).join('')||"<p class=\"mu\">Hali xodim yo'q</p>"}`)}
+ ${L.filter(u=>u.role=='seller').map(u=>`<div class="card"><div><b>${esc(u.name)}</b><div class="mu">ID: ${esc(u.loginId)}${u.active?'':" · ⛔ o'chirilgan"}</div></div><div style="margin-top:8px"><label class="ck"><input type="checkbox" ${u.permPrice?'checked':''} onchange="permStaff(${u.id},'permPrice',this.checked)"> Narxni o'zgartira oladi</label><label class="ck"><input type="checkbox" ${u.permDebts?'checked':''} onchange="permStaff(${u.id},'permDebts',this.checked)"> Qarzdorlarni ko'ra oladi</label></div><div class="row" style="margin-top:8px"><button class="g" onclick="pwStaff(${u.id})">🔑 Yangi parol</button><button class="${u.active?'r':'g'}" onclick="togStaff(${u.id},${!u.active})">${u.active?"O'chirish":'Yoqish'}</button></div></div>`).join('')||"<p class=\"mu\">Hali xodim yo'q</p>"}`)}
+async function permStaff(id,k,on){const r=await tryA(()=>api('/staff/'+id,'PATCH',{[k]:on}));if(!r)return staffV();toast(on?'Ruxsat berildi ✅':'Ruxsat olib tashlandi')}
 async function addStaff(){const name=$('#sfn').value.trim();if(!name)return toast('Xodim ismini kiriting');
  const r=await tryA(()=>api('/staff','POST',{name}));if(r)credV(r.name,r.loginId,r.password,1)}
 async function togStaff(id,on){if(!on&&!confirm("Xodim o'chirilsinmi? U darrov tizimdan chiqib ketadi."))return;if(!(await tryA(()=>api('/staff/'+id,'PATCH',{active:on}))))return;staffV()}
@@ -541,8 +556,9 @@ function setV(){const s=D.set,a=isA(),F=(t,k,m)=>`<label class="g" style="displa
  <label>Necha kun oldin eslatish</label><input id="sg" type="number" min="0" value="${s.days}">
  <label>SMS matni ({ism} {summa} {sana} {biznes})</label><input id="sx" value="${esc(s.tpl)}">
  <p class="sb" style="margin:14px 0 8px">XODIMLAR HUQUQLARI</p>
- <label class="ck"><input id="sp" type="checkbox" ${s.editPrice?'checked':''}> Sotuvchi sotish narxini o'zgartira oladi</label>
- <label class="ck"><input id="sd" type="checkbox" ${s.debtFlag?'checked':''}> Sotuvchi qarzdorlarni ko'ra oladi</label>`:''}
+ <label class="ck"><input id="sp" type="checkbox" ${s.editPrice?'checked':''}> Barcha sotuvchilar sotish narxini o'zgartira oladi</label>
+ <label class="ck"><input id="sd" type="checkbox" ${s.debtFlag?'checked':''}> Barcha sotuvchilar qarzdorlarni ko'ra oladi</label>
+ <p class="mu" style="margin:0 0 10px">Faqat bitta sotuvchiga berish uchun: Xodimlar bo'limida shu sotuvchining huquqlarini yoqing.</p>`:''}
  <button class="bt" onclick="saveSet()">Saqlash</button>
  <div class="row" style="margin:10px 0"><button class="g" onclick="theme();close()">🌓 Tun / kun</button>${a?'<button class="g" onclick="exp()">⬇️ Zaxira</button>':''}</div>
  ${a&&oldData()&&!D.products.length&&!D.sales.length?'<button class="g" style="width:100%" onclick="migrateOffer(1)">📦 Eski ma\'lumotni serverga ko\'chirish</button>':''}`);$('#sl').value=LG}
@@ -557,4 +573,11 @@ async function saveSet(){const lang=$('#sl').value;
  try{let me;try{me=await api('/auth/me')}catch(e){me=e.offline?meLoad():null;if(!me){if(e.offline)setTimeout(()=>toast(e.message),50);throw e}OFFLINE=true}
   await enter(me)}catch(e){if(!$('.lg'))loginV(0)}})();
 
+/* ===== Klaviatura yopilgach masshtabni tiklash (iOS zoom fix) ===== */
+(function(){var m=document.querySelector('meta[name=viewport]');if(!m)return;var c=m.content;
+ function fix(){var v=window.visualViewport;if(!v||v.scale<=1.001)return;
+  m.content=c+',maximum-scale=1';
+  setTimeout(function(){m.content=c;window.scrollTo(0,window.scrollY)},350)}
+ document.addEventListener('focusout',function(){setTimeout(fix,200)});
+})();
 </script></body></html>

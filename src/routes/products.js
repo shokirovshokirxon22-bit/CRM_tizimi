@@ -90,6 +90,23 @@ r.put('/:id', adminOnly, h(async (req, res) => {
   res.json(view(p, true));
 }));
  
+// Faqat sotish narxini o'zgartirish: admin yoki "narxni o'zgartirish" huquqi bor sotuvchi.
+// Tannarx sotuvchiga ko'rinmaydi: foiz serverda tannarxdan hisoblanadi.
+r.put('/:id/price', h(async (req, res) => {
+  if (!(await require('../perms').perms(req.user)).price) throw new ApiError(403, "Narxni o'zgartirish sizga yopiq");
+  const old = await db('products').where({ id: +req.params.id, shop_id: req.user.shopId }).first();
+  if (!old) throw new ApiError(404, 'Mahsulot topilmadi');
+  const price = num(req.body.price, { min: 0.0001 });
+  if (price === undefined) throw new ApiError(400, 'Narxni kiriting');
+  if (price < old.cost) throw new ApiError(400, "Bu narxni qo'yib bo'lmaydi");
+  const pct = (price / old.cost - 1) * 100;
+  await db('products').where({ id: old.id, shop_id: req.user.shopId }).update({ pct });
+  const p = await db('products').where({ id: old.id }).first();
+  const was = Math.round(sp(old)), now_ = Math.round(sp(p));
+  if (was !== now_) await audit(who(req), { action: 'product.update', entity: 'product', entityId: p.id, summary: `${old.name}: sotish narxi ${was} → ${now_}`, data: { changes: { price: [was, now_] } } });
+  res.json(view(p, req.user.role === 'admin'));
+}));
+
 // Ombor to'ldirish: yangi tannarx va qo'shiladigan miqdor
 r.post('/:id/restock', adminOnly, h(async (req, res) => {
   const qty = num(req.body.qty, { min: 0.0001 }), cost = num(req.body.cost, { min: 0.0001 });

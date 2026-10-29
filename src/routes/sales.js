@@ -91,7 +91,7 @@ r.post('/', h(async (req, res) => {
   if (dup) return res.status(200).json((await load(req.user, [dup]))[0]);
 
   const shop = await db('shops').where({ id: shopId }).first();
-  const canPrice = admin || !!shop.seller_edit_price;
+  const canPrice = admin || (await require('../perms').perms(req.user)).price;
   const credit = req.body.credit || null;
   const customer = str(req.body.customer, { max: 100 });
   if (credit && !customer) throw new ApiError(400, 'Nasiyada mijoz ismini kiriting');
