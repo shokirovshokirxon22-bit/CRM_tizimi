@@ -1,4 +1,4 @@
-const V='ombor-v8',A=['./','./index.html','./manifest.webmanifest','./icon-192.png','./icon-512.png'];
+const V='mizan-v11',A=['./','./index.html','./manifest.webmanifest','./icon-192.png','./icon-512.png','./favicon.png','./apple-touch-icon.png','./logo-h.png','./logo-h-dark.png','./logo-login.png','./logo-login-dark.png'];
 self.addEventListener('install',e=>{e.waitUntil(caches.open(V).then(c=>c.addAll(A)));self.skipWaiting()});
 self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(k=>Promise.all(k.filter(x=>x!=V).map(x=>caches.delete(x)))));self.clients.claim()});
 /* /api/ so'rovlari HECH QACHON keshlanmaydi: ma'lumot faqat serverdan, har bir foydalanuvchiga o'zinikini. */

@@ -54,20 +54,56 @@ async function login(c, ph, pw) { await until(() => c.$('#ph'), 'login oynasi');
   ok('ruxsatsiz sotuvchida ✏️ yo\'q', !S.$('#res .card .ic'));
 
   A.ev('staffV()'); await until(() => A.$('#md input[type=checkbox]'), 'huquq belgilari');
-  ok('Xodimlar oynasida ikkita huquq belgisi bor', A.w.document.querySelectorAll('#md .card input[type=checkbox]').length === 2);
+  ok('Xodimlar oynasida uchta huquq belgisi bor', A.w.document.querySelectorAll('#md .card input[type=checkbox]').length === 3);
   const cbs = A.w.document.querySelectorAll('#md .card input[type=checkbox]');
   cbs[0].checked = true; cbs[0].dispatchEvent(new A.w.Event('change'));
   await until(async () => true, 'x'); await sleep(400);
-  ok('adminning belgisi serverga saqlandi', (await db('users').where({ login_id: sid }).first()).perm_price == 1 && (await db('users').where({ login_id: sid }).first()).perm_debts == 0);
+  ok('adminning belgisi serverga saqlandi', (await db('users').where({ login_id: sid }).first()).perm_edit == 1 && (await db('users').where({ login_id: sid }).first()).perm_debts == 0);
 
-  S.ev('sync()'); await until(() => S.ev('D.set.canPrice') === true, 'sotuvchi huquqi yangilandi');
+  S.ev('sync()'); await until(() => S.ev('D.set.canEdit') === true, 'sotuvchi huquqi yangilandi');
+  ok('tahrirlash huquqi sotuvchida narx huquqini ham beradi', S.ev('D.set.canPrice') === true);
   S.ev('fl()'); await until(() => S.$('#res .card .ic'), '✏️ chiqdi');
   ok('huquqli sotuvchida ✏️ chiqdi', true);
-  S.ev("priceM(D.products[0].id)"); await until(() => S.$('#np'), 'narx oynasi');
-  S.set('np', '15000'); S.ev("savePrice(D.products[0].id)");
-  await until(() => S.ev('D.products[0].sell') === 15000, 'narx yangilandi');
-  ok('sotuvchi mahsulot narxini 15000 qildi', /15[\s\u00a0,.]?000/.test(S.$('#res').innerHTML));
-  ok('adminda ham yangi narx (foiz 50)', (await db('products').first()).pct === 50);
+  ok('kiritish huquqisiz sotuvchida Kiritish bo\'limi ko\'rinmaydi', ![...S.w.document.querySelectorAll('nav button')].some((b) => /Kiritish/.test(b.textContent)));
+  S.$('#res .card .ic').click(); await until(() => S.$('#fn') && S.$('#fn').value === 'Gilam', 'tahrirlash formasi ochildi');
+  ok('✏️ to\'liq tahrirlash formasini ochdi', S.ev('tab') === 'add' && !!S.$('#fc') && !!S.$('#fp'));
+  ok('sotuvchida O\'chirish tugmasi yo\'q', ![...S.w.document.querySelectorAll('#v button')].some((b) => /O'chirish/.test(b.textContent)));
+  S.set('fn', 'Gilam Premium'); S.set('fp', '50'); S.ev('saveP()');
+  await until(() => S.ev('D.products[0].name') === 'Gilam Premium', 'mahsulot tahrirlandi');
+  ok('sotuvchi mahsulot nomi va narxini tahrirladi (foiz 50)', (await db('products').first()).pct === 50 && (await db('products').first()).name === 'Gilam Premium');
+  ok('yangi sotish narxi 15000', S.ev('Math.round(sp(D.products[0]))') === 15000);
+
+  // Kiritish huquqi: bo'lim ko'rinadi va yangi mahsulot qo'shiladi
+  A.ev('staffV()'); await until(() => A.w.document.querySelectorAll('#md .card input[type=checkbox]').length === 3, 'huquq belgilari');
+  const cb2 = A.w.document.querySelectorAll('#md .card input[type=checkbox]')[1];
+  cb2.checked = true; cb2.dispatchEvent(new A.w.Event('change')); await sleep(400);
+  ok('kiritish huquqi serverga saqlandi', (await db('users').where({ login_id: sid }).first()).perm_add == 1);
+  S.ev('sync().then(render)'); await until(() => S.ev('D.set.canAdd') === true, 'kiritish huquqi yangilandi');
+  await until(() => [...S.w.document.querySelectorAll('nav button')].some((b) => /Kiritish/.test(b.textContent)), 'Kiritish tugmasi');
+  ok('Kiritish bo\'limi sotuvchiga ko\'rindi', true);
+  S.ev("go('add')"); await until(() => S.$('#fn'), 'yangi mahsulot formasi');
+  S.set('fn', 'Parda'); S.set('fc', '5000'); S.set('fp', '10'); S.set('fq', '8'); S.set('fw', '2'); S.ev('saveP()');
+  await until(() => S.ev('D.products.length') === 2, 'sotuvchi mahsulot qo\'shdi');
+  ok('sotuvchi yangi mahsulot kiritdi', !!(await db('products').where({ name: 'Parda' }).first()));
+
+  // Profil bo'limidagi oynalarda ✕ (chiqish) tugmasi
+  A.ev("go('me')"); await until(() => A.$('.mi'), 'profil menyusi');
+  const menu = [...A.w.document.querySelectorAll('.mi')];
+  const items = ['Xodimlar', 'Xavfsizlik', 'Sozlamalar', 'Ilova haqida', 'Excelga yuklash', 'Xarajatlar', 'Faoliyat tarixi'];
+  for (const nmI of items) {
+    const b = [...A.w.document.querySelectorAll('.mi')].find((x) => x.textContent.includes(nmI));
+    ok(`profil menyusida "${nmI}" bor`, !!b);
+    b.click(); await until(() => A.$('#md .mx'), `"${nmI}" oynasida ✕ tugmasi`);
+    ok(`"${nmI}" oynasida ✕ bor`, true);
+    A.$('#md .mx').click(); await sleep(30);
+    ok(`"${nmI}" ✕ bosilganda yopildi`, !A.$('#md'));
+  }
+  // Xavfsizlik ichidan ochiladigan ichki oynada ham ✕ qoladi; boshqa bo'limlardagi oynalarda ✕ yo'q
+  [...A.w.document.querySelectorAll('.mi')].find((x) => x.textContent.includes('Xavfsizlik')).click(); await until(() => A.$('#md .mx'), 'xavfsizlik');
+  A.ev('phoneV()'); await until(() => A.$('#npn'), 'raqam oynasi');
+  ok('ichki oynada ham ✕ bor', !!A.$('#md .mx')); A.$('#md .mx').click();
+  A.ev("go('find')"); await until(() => A.$('#res .card'), 'qidiruv'); A.ev("pm(D.products[0].id)"); await until(() => A.$('#md'), 'mahsulot oynasi');
+  ok('profildan tashqari oynada ✕ yo\'q (o\'zgarmagan)', !A.$('#md .mx')); A.ev('close()');
   ok('brauzerda JS xatosi yo\'q', S.errors.length === 0 && A.errors.length === 0);
   console.log(`\nHUQUQ UI TESTI: HAMMASI JOYIDA (${n} ta tekshiruv)`); srv.close(); process.exit(0);
 })().catch((e) => { console.error(e); process.exit(1); });

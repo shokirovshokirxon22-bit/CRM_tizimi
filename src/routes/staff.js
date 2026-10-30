@@ -7,7 +7,7 @@ const { audit, who } = require('../audit');
 
 // Faqat admin (app.js da adminOnly bilan ulangan). Hamma so'rov req.user.shopId bilan cheklanadi.
 const r = express.Router();
-const view = (u) => ({ id: u.id, name: u.name, loginId: u.login_id, phone: u.phone || null, role: u.role, active: !!u.active, createdAt: u.created_at, permPrice: !!u.perm_price, permDebts: !!u.perm_debts });
+const view = (u) => ({ id: u.id, name: u.name, loginId: u.login_id, phone: u.phone || null, role: u.role, active: !!u.active, createdAt: u.created_at, permEdit: !!u.perm_edit, permAdd: !!u.perm_add, permDebts: !!u.perm_debts });
 
 async function freshLoginId() {
   for (let i = 0; i < 30; i++) {
@@ -48,7 +48,8 @@ r.patch('/:id', h(async (req, res) => {
   const upd = {}; let newPw;
   if (req.body.name !== undefined) upd.name = str(req.body.name, { req: true, max: 100 });
   if (req.body.active !== undefined) upd.active = !!req.body.active;
-  if (req.body.permPrice !== undefined) upd.perm_price = !!req.body.permPrice;
+  if (req.body.permEdit !== undefined) upd.perm_edit = !!req.body.permEdit;
+  if (req.body.permAdd !== undefined) upd.perm_add = !!req.body.permAdd;
   if (req.body.permDebts !== undefined) upd.perm_debts = !!req.body.permDebts;
   if (req.body.resetPassword) newPw = randomPassword(); // yangi vaqtinchalik parol (xodim parolini unutsa)
   else if (req.body.password !== undefined) {
@@ -61,7 +62,8 @@ r.patch('/:id', h(async (req, res) => {
   const parts = [];
   if (upd.name !== undefined && upd.name !== u.name) parts.push(`ism: ${u.name} → ${upd.name}`);
   if (upd.active !== undefined && !!upd.active !== !!u.active) parts.push(upd.active ? 'qayta faollashtirildi' : "o'chirildi (kira olmaydi)");
-  if (upd.perm_price !== undefined && !!upd.perm_price !== !!u.perm_price) parts.push(`narxni o'zgartirish huquqi: ${u.perm_price ? 'ha' : "yo'q"} → ${upd.perm_price ? 'ha' : "yo'q"}`);
+  if (upd.perm_edit !== undefined && !!upd.perm_edit !== !!u.perm_edit) parts.push(`mahsulotlarni tahrirlash huquqi: ${u.perm_edit ? 'ha' : "yo'q"} → ${upd.perm_edit ? 'ha' : "yo'q"}`);
+  if (upd.perm_add !== undefined && !!upd.perm_add !== !!u.perm_add) parts.push(`mahsulot kiritish huquqi: ${u.perm_add ? 'ha' : "yo'q"} → ${upd.perm_add ? 'ha' : "yo'q"}`);
   if (upd.perm_debts !== undefined && !!upd.perm_debts !== !!u.perm_debts) parts.push(`qarzdorlarni ko'rish huquqi: ${u.perm_debts ? 'ha' : "yo'q"} → ${upd.perm_debts ? 'ha' : "yo'q"}`);
   if (newPw) parts.push(req.body.resetPassword ? 'yangi vaqtinchalik parol berildi' : "parol o'zgartirildi");
   if (parts.length) await audit(who(req), { action: 'staff.update', entity: 'staff', entityId: u.id, summary: `Xodim ${u.name}: ${parts.join(', ')}` });

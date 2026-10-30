@@ -12,7 +12,7 @@ const settings = express.Router();
 settings.get('/', h(async (req, res) => {
   const s = await db('shops').where({ id: req.user.shopId }).first();
   const p = await require('../perms').perms(req.user); // shu foydalanuvchi uchun samarali huquqlar
-  res.json({ shopName: s.name, sellerEditPrice: !!s.seller_edit_price, sellerSeeDebts: !!s.seller_see_debts, myEditPrice: p.price, mySeeDebts: p.debts, ...parseS(s.settings) });
+  res.json({ shopName: s.name, sellerEditPrice: !!s.seller_edit_price, sellerSeeDebts: !!s.seller_see_debts, myEditPrice: p.price, myEdit: p.edit, myAdd: p.add, mySeeDebts: p.debts, ...parseS(s.settings) });
 }));
 settings.put('/', adminOnly, h(async (req, res) => {
   const s = await db('shops').where({ id: req.user.shopId }).first();
