@@ -172,15 +172,24 @@ function rankV(){const m={};D.sales.forEach(s=>s.items.forEach(i=>{const r=m[i.n
  V(hd('Mahsulot reytingi',1)+`<div class="list">${L.map((r,i)=>`<div class="card"><div class="sp"><b>${i<3?['🥇','🥈','🥉'][i]:i+1+'.'} ${esc(r.n)}</b><b class="pc">${fmt(r.a)} so'm</b></div><div class="mu">Sotilgan: ${+r.q.toFixed(2)} ${UL[r.u]}</div><div class="bar"><i style="width:${r.a/mx*100}%"></i></div></div>`).join('')||'<p class="mu">Hali sotuv yo\'q</p>'}</div>`)}
 
 /* --- Kiritish --- */
-function addV(k){if(k&&$('#fn')){const g=i=>$('#'+i)?$('#'+i).value:'';DR={name:g('fn'),cost:g('fc'),pct:g('fp'),qty:g('fq'),min:g('fm'),w:g('fw'),bc:g('fb')}}const p=D.products.find(x=>x.id==ED);if(p)AU=p.unit;const e=p||DR||{name:'',cost:'',pct:'',qty:'',min:'',w:''},m=AU=='m';
+let LASTE='p';const r2=x=>Math.round(x*100)/100,r6=x=>Math.round(x*1e6)/1e6;
+function addV(k){LASTE='p';if(k&&$('#fn')){const g=i=>$('#'+i)?$('#'+i).value:'';DR={name:g('fn'),cost:g('fc'),pct:g('fp'),qty:g('fq'),min:g('fm'),w:g('fw'),bc:g('fb')}}const p=D.products.find(x=>x.id==ED);if(p)AU=p.unit;const e=p||DR||{name:'',cost:'',pct:'',qty:'',min:'',w:''},m=AU=='m';
  V(hd(p?'Tahrirlash':'Yangi mahsulot')+(p?'':`<button class="bt" style="margin:0 0 14px" onclick="scanAdd()">📷 Shtrix-kod skanerlash</button>`)+`<div class="seg">${[['m','📏 Metr'],['dona','🛍 Dona'],['kg','⚖️ Kilo']].map(u=>`<button class="${AU==u[0]?'on':''}" ${p?'disabled':''} onclick="AU='${u[0]}';addV(1)">${u[1]}</button>`).join('')}</div>
  <label>Mahsulot nomi</label><input id="fn" value="${esc(e.name)}">
  ${m?`<label>En uzunligi (m)</label><input id="fw" type="number" step="any" value="${e.w||''}" oninput="pv()">`:''}
- <div class="row"><div><label>Dastlabki narx${m?' (1 m)':''}</label><input id="fc" type="number" step="any" value="${e.cost}" oninput="pv()"></div><div><label>Foiz (%)</label><input id="fp" type="number" step="any" value="${e.pct}" oninput="pv()"></div></div>
+ <div class="row"><div><label>Dastlabki narx${m?' (1 m)':''}</label><input id="fc" type="number" step="any" value="${e.cost}" oninput="pc('c')"></div><div><label>Foiz (%)</label><input id="fp" type="number" step="any" value="${e.pct}" oninput="pc('p')"></div></div>
+ <label>Sotish narxi${m?' (1 m)':''}</label><input id="fs" type="number" step="any" value="${(+e.cost>0&&e.pct!==''&&e.pct!=null)?r2(e.cost*(1+(+e.pct||0)/100)):''}" oninput="pc('s')"><p class="mu" style="margin:-6px 0 12px;font-size:12px">Foiz yoki sotish narxidan birini yozing, ikkinchisi o'zi hisoblanadi</p>
  <label>${m?"Bo'y uzunligi (m)":AU=='kg'?'Miqdor (kg)':'Miqdor (dona)'}</label><input id="fq" type="number" step="any" value="${e.qty}" ${p?`data-base="${p.qty}"`:''} oninput="pv()">
  <label>Shtrix-kod (ixtiyoriy)</label><div class="row"><input id="fb" value="${esc(e.bc||'')}"><button class="g" style="flex:none;margin:4px 0 12px" onclick="scanAdd()">📷</button></div><label>Qizil chegara (ogohlantirish)</label><input id="fm" type="number" step="any" value="${e.min||''}">
  <div class="card" id="pvw"></div><button class="bt" onclick="saveP()">Saqlash</button>${p&&isA()?`<button class="r" style="width:100%;margin-top:10px" onclick="delP('${p.id}')">O'chirish</button>`:''}`);pv()}
-function pv(){const g=i=>+(($('#'+i)||{}).value)||0,c=g('fc'),q=g('fq'),w=g('fw'),s=c*(1+g('fp')/100),R=(a,b,c2)=>`<div class="sp"><span class="mu">${a}</span><b class="${c2||''}">${b} so'm</b></div>`;
+/* Foiz va sotish narxi bir-biriga bog'liq: oxirgi yozilgani asos bo'ladi, ikkinchisi hisoblanadi.
+   src: 'c' tannarx o'zgardi, 'p' foiz yozildi, 's' sotish narxi yozildi */
+function pc(src){if(src=='p'||src=='s')LASTE=src;const c=+$('#fc').value||0,fp=$('#fp'),fs=$('#fs');
+ if(LASTE=='s'){const v=+fs.value;if(fs.value===''){if(src=='s')fp.value=''}else if(c>0&&v>0)fp.value=r6((v/c-1)*100)}
+ else{if(fp.value==='')fs.value='';else if(c>0)fs.value=r2(c*(1+(+fp.value||0)/100));else fs.value=''}
+ pv()}
+function pctNow(){const c=+$('#fc').value||0,v=+$('#fs').value;return LASTE=='s'&&c>0&&v>0?(v/c-1)*100:(+$('#fp').value||0)}
+function pv(){const g=i=>+(($('#'+i)||{}).value)||0,c=g('fc'),q=g('fq'),w=g('fw'),s=c*(1+pctNow()/100),R=(a,b,c2)=>`<div class="sp"><span class="mu">${a}</span><b class="${c2||''}">${b} so'm</b></div>`;
  $('#pvw').innerHTML=R(`Sotish narxi (${UL[AU]}):`,fmt(s))+(AU=='m'?R('Sotish narxi (m²):',w?fmt(s/w):0):'')+'<hr>'+R('Olingan umumiy summa:',fmt(c*q))+R('Sotilsa umumiy summa:',fmt(s*q))+R('Sof foyda:',fmt((s-c)*q),'gn')}
 /* --- Qidiruv + sotish --- */
 function findV(){V(hd('Mahsulotlar Ombori')+`<div class="row" style="align-items:center"><input class="srch" id="q" placeholder="🔍  Mahsulot qidirish..." oninput="fl()" onkeydown="if(event.key=='Enter')qe()"><button class="ic" style="flex:none;width:50px;height:50px" onclick="scanSell()">📷</button></div><button class="bt" style="margin:0 0 12px" onclick="scanSell()">📷 Tez sotish (skanerlash)</button><div id="res" class="list"></div>`);fl()}
@@ -233,7 +242,7 @@ const W=[["Uy","Главная","Home"],["Sotuvni bekor qilish","Отменит�
 ["Bugungi savdo","Продажи сегодня","Today's sales"],["Bugungi foyda","Прибыль сегодня","Today's profit"],["Ombordagi summa","Сумма на складе","Stock value"],["Jami qarzlar","Всего долгов","Total debts"],["Jami qarz","Всего долг","Total debt"],
 ["Oxirgi 7 kun savdosi","Продажи за 7 дней","Last 7 days sales"],["Oxirgi sotuvlar","Последние продажи","Recent sales"],["Hammasi","Все","All"],["Hali sotuv yo'q","Продаж пока нет","No sales yet"],["Hammasi joyida","Всё в порядке","All good"],
 ["ta qarz muddati keldi","долг(ов): срок наступил","debt(s) due"],["Yangi mahsulot","Новый товар","New product"],["Tahrirlash","Изменить","Edit"],["Metr","Метр","Meter"],["Dona","Штуки","Pieces"],["Kilo","Кило","Kilo"],
-["Mahsulot nomi","Название товара","Product name"],["En uzunligi (m)","Ширина (м)","Width (m)"],["Bo'y uzunligi (m)","Длина (м)","Length (m)"],["Dastlabki narx","Закупочная цена","Cost price"],["Foiz (%)","Наценка (%)","Markup (%)"],
+["Mahsulot nomi","Название товара","Product name"],["En uzunligi (m)","Ширина (м)","Width (m)"],["Bo'y uzunligi (m)","Длина (м)","Length (m)"],["Dastlabki narx","Закупочная цена","Cost price"],["Foiz (%)","Наценка (%)","Markup (%)"],["Foiz yoki sotish narxidan birini yozing, ikkinchisi o'zi hisoblanadi","Введите наценку или цену продажи, второе посчитается само","Enter either the markup or the selling price, the other is calculated automatically"],["Sotish narxi dastlabki narxdan past bo'lmasin","Цена продажи не должна быть ниже закупочной","Selling price must not be lower than the cost price"],
 ["Miqdor (kg)","Количество (кг)","Quantity (kg)"],["Miqdor (dona)","Количество (шт)","Quantity (pcs)"],["Miqdor","Количество","Quantity"],["Qizil chegara (ogohlantirish)","Минимум (предупреждение)","Low-stock limit (alert)"],
 ["Sotish narxi","Цена продажи","Selling price"],["Olingan umumiy summa","Общая закупка","Total cost"],["Sotilsa umumiy summa","Сумма при продаже","Total if sold"],["Sof foyda","Чистая прибыль","Net profit"],["Saqlash","Сохранить","Save"],["O'chirish","Удалить","Delete"],
 ["Mahsulotlar Ombori","Склад товаров","Product Warehouse"],["Mahsulot qidirish...","Поиск товара...","Search product..."],["Mahsulot topilmadi","Товар не найден","Product not found"],["Qolgan","Осталось","Left"],["Olingan","Закуплено","Bought"],
@@ -485,8 +494,8 @@ async function doMigrate(){const d=oldData();if(!d)return close();const r=await 
 function skipMig(){try{localStorage.setItem('mig:'+U.id,'1')}catch(e){}close()}
 
 /* --- Mahsulot --- */
-async function saveP(){const n=$('#fn').value.trim(),c=+$('#fc').value,o={name:n,unit:AU,cost:c,pct:+$('#fp').value||0,qty:+$('#fq').value||0,min:+$('#fm').value||0,barcode:$('#fb').value.trim(),width:$('#fw')?+$('#fw').value||0:0};if($('#fq').dataset.base!==undefined)o.qtyBase=+$('#fq').dataset.base;
- if(!n||!(c>0))return toast('Nom va narxni kiriting');const ed=D.products.find(x=>x.id==ED);
+async function saveP(){const n=$('#fn').value.trim(),c=+$('#fc').value,o={name:n,unit:AU,cost:c,pct:pctNow(),qty:+$('#fq').value||0,min:+$('#fm').value||0,barcode:$('#fb').value.trim(),width:$('#fw')?+$('#fw').value||0:0};if($('#fq').dataset.base!==undefined)o.qtyBase=+$('#fq').dataset.base;
+ if(!n||!(c>0))return toast('Nom va narxni kiriting');if(o.pct<0)return toast("Sotish narxi dastlabki narxdan past bo'lmasin");const ed=D.products.find(x=>x.id==ED);
  if(!(await tryA(()=>ed?api('/products/'+ed.id,'PUT',o):api('/products','POST',o))))return;
  await tryA(sync);toast('Saqlandi ✅');go('find')}
 async function delP(id){if(!confirm("O'chirilsinmi?"))return;if(!(await tryA(()=>api('/products/'+id,'DELETE'))))return;await tryA(sync);close();go('find')}
