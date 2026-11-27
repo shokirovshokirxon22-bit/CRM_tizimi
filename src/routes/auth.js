@@ -1,11 +1,13 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const { db } = require('../db');
-const { sign, auth, adminOnly } = require('../auth');
+const { sign, auth, adminOnly, secret } = require('../auth');
 const { ApiError, h, str, userPhone, phoneForms, randomLoginId, idOf, now } = require('../util');
 const otp = require('../otp');
 const lockout = require('../lockout');
 const { audit, who, maskPhone } = require('../audit');
+const { statusOf, DAY } = require('../billing');
+const crypto = require('crypto');
 
 const r = express.Router();
 const pub = (u) => ({ id: u.id, name: u.name, phone: u.phone || null, role: u.role, loginId: u.login_id || u.loginId });
@@ -39,15 +41,24 @@ r.post('/register', h(async (req, res) => {
   if (await phoneTaken(ph)) throw new ApiError(409, 'Bu raqam band');
   await otp.check(ph, 'register', req.body.code); // tasdiqlanmagan raqam bilan hisob ochilmaydi
   const hash = await bcrypt.hash(pw, 10);
+  // Sinov muddati har bir telefon raqamga bir marta beriladi: hisobni o'chirib qayta ochib bo'lmaydi
+  const phHash = crypto.createHmac('sha256', secret()).update('trial|' + ph).digest('hex');
+  let noTrial = false;
   const user = await db.transaction(async (trx) => {
-    const sid = idOf(await trx('shops').insert({ name: shopName, created_at: now() }).returning('id'));
+    const t = now();
+    noTrial = !!(await trx('trial_phones').where({ phone_hash: phHash }).first());
+    const tp = await trx('plans').where({ code: 'trial' }).first();
+    const days = noTrial ? 0 : (tp ? tp.days : 30);
+    if (!noTrial) await trx('trial_phones').insert({ phone_hash: phHash, created_at: t });
+    const sid = idOf(await trx('shops').insert({ name: shopName, created_at: t, sub_until: t + days * DAY, plan: 'trial' }).returning('id'));
     const uid = idOf(await trx('users').insert({
       shop_id: sid, phone: ph, phone_verified: true, login_id: await freshLoginId(trx), name, role: 'admin',
       password_hash: hash, active: true, created_at: now(),
     }).returning('id'));
     return trx('users').where({ id: uid }).first();
   });
-  res.status(201).json({ token: sign(user), user: pub(user), shop: { id: user.shop_id, name: shopName } });
+  const shop = await db('shops').where({ id: user.shop_id }).first();
+  res.status(201).json({ token: sign(user), user: pub(user), shop: { id: user.shop_id, name: shopName }, sub: { ...statusOf(shop), ...(noTrial ? { noTrial: true } : {}) } });
 }));
 
 /* ---------- Kirish: 6 xonali ID + parol (eski hisoblar telefon bilan ham kira oladi) ---------- */
@@ -66,12 +77,12 @@ r.post('/login', h(async (req, res) => {
   }
   await lockout.succeed(u.id, req.ip);
   const shop = await db('shops').where({ id: u.shop_id }).first();
-  res.json({ token: sign(u), user: pub(u), shop: { id: shop.id, name: shop.name } });
+  res.json({ token: sign(u), user: pub(u), shop: { id: shop.id, name: shop.name }, sub: statusOf(shop) });
 }));
 
 r.get('/me', auth, h(async (req, res) => {
   const shop = await db('shops').where({ id: req.user.shopId }).first();
-  res.json({ user: pub({ ...req.user }), shop: { id: shop.id, name: shop.name } });
+  res.json({ user: pub({ ...req.user }), shop: { id: shop.id, name: shop.name }, sub: statusOf(shop) });
 }));
 
 /* ---------- Parolni almashtirish (kirgan foydalanuvchi: admin ham, xodim ham) ---------- */

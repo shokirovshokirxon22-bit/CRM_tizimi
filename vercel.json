@@ -1,3 +1,8 @@
 {
-  "rewrites": [{ "source": "/api/(.*)", "destination": "/api" }]
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api" },
+    { "source": "/owner", "destination": "/api" }
+  ],
+  "functions": { "api/index.js": { "includeFiles": "src/owner.html" } },
+  "crons": [{ "path": "/api/billing/cron", "schedule": "0 4 * * *" }]
 }

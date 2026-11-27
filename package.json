@@ -6,7 +6,11 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
+<<<<<<< HEAD
     "test": "node test/smoke.js && node test/regress.js && node test/auth.js && node test/sms_limit.js && node test/void.js && node test/perms.js && node test/perms_ui.js && node test/offline.js && node test/lockout.js && node test/audit.js && node test/monitor.js && node test/migrate.js && node test/ui.js && node test/price_pct.js && node test/offline_ui.js && node test/audit_ui.js && node test/i18n_ui.js"
+=======
+    "test": "node test/smoke.js && node test/regress.js && node test/auth.js && node test/sms_limit.js && node test/void.js && node test/perms.js && node test/perms_ui.js && node test/offline.js && node test/lockout.js && node test/audit.js && node test/monitor.js && node test/migrate.js && node test/ui.js && node test/price_pct.js && node test/billing.js && node test/pay.js && node test/billing_ui.js && node test/offline_ui.js && node test/audit_ui.js && node test/i18n_ui.js"
+>>>>>>> 95b43af (premium funksiyasi)
   },
   "engines": {
     "node": ">=18"

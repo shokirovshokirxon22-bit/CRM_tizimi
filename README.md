@@ -127,3 +127,41 @@ Cheklov: Vercel so'rov hajmi ~4.5 MB, shuning uchun juda katta eski zaxirani ko'
 **Faoliyat tarixi (audit).** Profil → "📜 Faoliyat tarixi" (faqat admin). Yoziladi: mahsulot qo'shish/tahrir (narx, foiz, qoldiq: avvalgi → yangi)/to'ldirish/o'chirish, sotuvchi narxni o'zgartirgan sotuv, oflayn sotuvda qoldiq yetmaganligi, sotuvni bekor qilish (sabab bilan), qarz va to'lov, xarajat, sozlamalar, xodim (qo'shish, parol yangilash, o'chirish), parol/telefon almashtirish. Har yozuvda **kim**, qachon va IP. Tarix faqat o'qiladi (API orqali o'zgartirib/o'chirib bo'lmaydi), parol, token va to'liq telefon yozilmaydi. Tarix yozilmasa ham asosiy amal to'xtamaydi. `AUDIT_RETENTION_DAYS` (365) kundan eskilari o'zi tozalanadi. Oddiy sotuvlar tarixga ikki marta yozilmaydi (ular `sales` jadvalida sotuvchi bilan turadi).
 
 **Xatolarni kuzatish (Sentry).** `SENTRY_DSN` bo'sh bo'lsa o'chiq. Yoqish: sentry.io da Node.js loyihasi oching, DSN ni Vercel'da `SENTRY_DSN` ga qo'ying. Faqat kutilmagan 5xx xatolar va brauzerdagi kutilmagan JS xatolari ketadi (brauzer xatosi `/api/client-error` orqali, brauzerga Sentry skripti yuklanmaydi). Sentry'ga telefon, parol, token, so'rov tanasi va sarlavhalar **yuborilmaydi** (`src/monitor.js` tozalaydi; tozalab bo'lmasa hodisa yuborilmaydi). Kutilgan xatolar (401, 400, 404, 409, 413) ketmaydi.
+
+## Pullik tizim (obuna)
+
+**Qanday ishlaydi**
+- Yangi do'kon ro'yxatdan o'tganda **30 kun bepul** sinov oladi (kunlarni o'zgartirish mumkin). Sinov har bir telefon raqamga **bir marta** beriladi: hisobni o'chirib qayta ochsa sinov qaytmaydi.
+- Sinovdan keyin tariflar: **1 oy**, **3 oy** va **umrbod**. Umrbod tarif faqat **birinchi 3 ta** xaridorga: 3 ta sotilgach u ro'yxatdan yo'qoladi (hisob o'chirilsa ham joy qaytmaydi; to'lov jarayonidagi odam uchun joy 30 daqiqa ushlab turiladi).
+- Obunani **admin** to'laydi, uning **xodimlari** ham shu obunaga bo'ysunadi. Tarif bo'limi (Profil → 💎 Tarif / Premium) faqat adminga ko'rinadi.
+- Muddat tugashi bilan hisob **bloklanadi**: ma'lumotlarga kirish yopiladi (402), lekin login ochiq va admin darrov **to'lov oynasiga** tushadi. To'lov tasdiqlangach blok o'zi ochiladi. Login oynasidagi **«💳 Obuna uchun to'lov»** tugmasi ham bor (admin ID si bilan, parolsiz).
+- Tugashiga **5 kun va 1 kun** qolganda: ilovada banner + eslatma oynasi, hamda adminning telefoniga SMS.
+- Muddat **faqat server vaqti bilan** hisoblanadi, qurilma soatini surish foyda bermaydi. Oflayn ishlaganda soat orqaga surilsa ilova onlayn tekshiruv talab qiladi.
+- Muddati tugamasdan to'lansa, qolgan kunlar yo'qolmaydi (yangi muddat eski tugash sanasiga qo'shiladi).
+- Obuna tugagan paytda qilingan sotuvlar qurilmada saqlanadi va to'lovdan keyin avtomatik yuboriladi.
+
+**Sozlash (bir marta)**
+1. `.env` (Vercel'da Environment Variables) ga `PUBLIC_URL`, `CRON_SECRET` va to'lov tizimi kalitlarini qo'ying (`.env.example` ga qarang).
+2. **Payme** (business.payme.uz): kassa yarating, *Endpoint URL* = `PUBLIC_URL/api/pay/payme`. `PAYME_MERCHANT_ID` va `PAYME_KEY` ni qo'ying. Avval **sinov kassa** bilan Payme'ning o'z test sahifasida hamma stsenariyni o'tkazing (`PAYME_TEST=1`, test key), keyin jangovoy kassaga o'ting.
+3. **Click** (merchant.click.uz): xizmat yarating, *Prepare URL* = `PUBLIC_URL/api/pay/click/prepare`, *Complete URL* = `PUBLIC_URL/api/pay/click/complete`. `CLICK_SERVICE_ID`, `CLICK_MERCHANT_ID`, `CLICK_SECRET_KEY` ni qo'ying.
+4. Ikkalasidan bittasini sozlasangiz ham bo'ladi: sozlangan usullar tugmalari avtomatik chiqadi.
+5. SMS eslatma matnini (`REMIND_SMS_TEMPLATE`) Eskiz'da shablon sifatida tasdiqlating. Vercel'da eslatmalarni `vercel.json` dagi Cron (har kuni) ishga tushiradi, oddiy serverda esa server o'zi har 6 soatda tekshiradi.
+
+**Narxlarni o'zgartirish (egasi paneli)**
+- Brauzerda `https://SAYTINGIZ/owner` oching va serveringizdagi `SUPER_KEY` ni kiriting.
+- **Tariflar va narxlar** jadvalida har bir tarifning nomi, kuni, narxi, faol/nofaolligini o'zgartirib «Saqlash» bosing. Umrbod tarif uchun «Joylar» (nechta sotiladi) ham shu yerda. «Sinov» qatorida sinov kunlarini o'zgartirasiz (faqat yangi ro'yxatdan o'tganlarga ta'sir qiladi).
+- Yangi tarif (masalan 6 oy) qo'shish ham shu yerda.
+- Narx o'zgarsa **faqat keyingi to'lovlarga** ta'sir qiladi; allaqachon ochilgan to'lovlar eski narxda qoladi.
+- **Do'konlar** bo'limida do'konni qidirib, naqd yoki o'tkazma bilan to'lagan mijozga «Tarif berish» orqali qo'lda tarif/kun berish mumkin. **Oxirgi to'lovlar** va umumiy tushum ham shu yerda.
+
+**Ilovalar (iOS / Android)**
+- Ilova ichida raqamli obuna sotish App Store va Google Play qoidalariga tegishli (Apple: In-App Purchase; Google: Play Billing). Qoidalar va hududlar o'zgarib turadi, do'konga yuborishdan oldin joriy shartlarni tekshiring.
+- Shu sababli server `PAY_HIDDEN_PLATFORMS` (default `ios`) ro'yxatidagi platformalarda to'lov tugmalarini yashiradi va to'lov yaratishni rad etadi. Ilova `Capacitor.getPlatform()` orqali platformani o'zi aniqlaydi. Android uchun ham yashirmoqchi bo'lsangiz: `PAY_HIDDEN_PLATFORMS=ios,android`.
+- To'lov sahifasi Capacitor `@capacitor/browser` plagini bo'lsa ilova ichidagi brauzerda, bo'lmasa tashqi brauzerda ochiladi. Ilova to'lov holatini o'zi tekshirib turadi, foydalanuvchi qaytgach hisob ochiq bo'ladi.
+
+**Qo'shimcha eslatmalar**
+- Soliq cheki (fiskalizatsiya): Payme uchun `PAYME_IKPU` va `PAYME_PACKAGE_CODE` ni to'ldirsangiz chek tavsifi avtomatik yuboriladi. Kodlarni va soliq tartibini buxgalteringiz/Payme bilan aniqlang.
+- Payme'dan to'lov qaytarilsa (refund), tegishli obuna kunlari ham ayriladi (umrbod bo'lsa bekor bo'ladi).
+- Foydalanuvchi shartlari (oferta), qaytarish siyosati va maxfiylik siyosati sahifalarini tayyorlab qo'ying: to'lov tizimlari va do'konlar ularni talab qiladi.
+
+**Testlar:** `npm test` ichida `test/billing.js` (tarif, bloklash, eslatma, umrbod joylar, egasi API), `test/pay.js` (Payme va Click protokollari), `test/billing_ui.js` (interfeys). Postgres'da sinash: `TEST_DATABASE_URL=postgres://... node test/billing.js`.

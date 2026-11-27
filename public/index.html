@@ -68,6 +68,7 @@ hr{border:0;border-top:1px solid var(--tx);opacity:.3;margin:8px 0}
 .modal{position:fixed;inset:0;background:#0008;display:flex;align-items:flex-end;justify-content:center;z-index:9}
 .mxw{position:sticky;top:0;height:0;z-index:3}.mx{position:absolute;right:-6px;top:6px;width:36px;height:36px;border-radius:50%;background:var(--in);color:var(--tx);font-size:16px;line-height:36px;padding:0;text-align:center}
 .modal>div{background:var(--cd);width:100%;max-width:520px;border-radius:24px 24px 0 0;padding:20px;max-height:92%;overflow:auto;padding-bottom:calc(20px + env(safe-area-inset-bottom,0px))}
+.sbn{display:block;width:calc(100% - 28px);max-width:640px;margin:8px auto 0;background:var(--or);color:#fff;font-weight:700;font-size:13px;border-radius:12px;padding:9px 12px}.sbn.hot{background:var(--rd)}.plan .row{margin-top:8px}
 .ob{position:fixed;top:calc(6px + env(safe-area-inset-top,0px));left:50%;transform:translateX(-50%);z-index:30;border:0;background:var(--or);color:#fff;font:700 12px/1 system-ui,sans-serif;padding:7px 13px;border-radius:99px;box-shadow:0 4px 14px #0003;max-width:92vw;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.ob.off{background:var(--tx);color:var(--bg)}
 .toast{position:fixed;left:50%;bottom:100px;transform:translateX(-50%);background:var(--tx);color:var(--bg);padding:11px 18px;border-radius:14px;z-index:20;font-weight:600}
 .lg{max-width:380px;margin:9vh auto 0;padding:0 14px;text-align:center}.lg .card{text-align:left}.lo{font-size:50px}
@@ -122,7 +123,7 @@ function authV(){const m=AUTHST.m;
 <label>Parol</label><input id="pw" type="password" autocomplete="current-password"><label class="ck"><input id="rm" type="checkbox" checked> Meni eslab qol</label><p id="er" class="rd"></p>
 <p class="mu" style="font-size:12px">Xodim bo'lsangiz, admin bergan ID va parol bilan kiring. Eski hisob bo'lsangiz, ID o'rniga telefon raqamingiz ham yaraydi.</p>
 <button class="bt" onclick="doLogin()">Kirish</button>
-<button class="g" style="width:100%;margin-top:8px" onclick="loginV(2)">Parolni unutdingizmi?</button>`;
+<button class="g" style="width:100%;margin-top:8px" onclick="loginV(2)">Parolni unutdingizmi?</button>${PLAT=='ios'?'':`<button class="g" style="width:100%;margin-top:8px" onclick="payIdV()">💳 Obuna uchun to'lov</button>`}`;
  else if(m==1)body=`<label>Ism / Do'kon nomi</label><input id="nm"><label>Telefon raqam</label><input id="ph" type="tel" placeholder="+998 90 123 45 67">
 <label>Parol</label><input id="pw" type="password" autocomplete="new-password"><p class="mu" style="font-size:12px">Telefon raqamingizga SMS kod yuboriladi. Ro'yxatdan o'tgach tizim sizga 6 xonali ID beradi.</p><p id="er" class="rd"></p>
 <button class="bt" id="b1" onclick="doRegStart()">Kod yuborish</button>
@@ -138,8 +139,8 @@ const norm=p=>p.replace(/\D/g,'');
 function showCode(){AUTHST.sent=true;const b=$('#cdb');b&&(b.style.display='block');const b1=$('#b1');b1&&(b1.style.display='none');const p=$('#ph');p&&(p.readOnly=true);setTimeout(()=>{const c=$('#cd');c&&c.focus()},50)}
 /* ===== ASOSIY ===== */
 function render(){const T=[['home','🏠','Uy'],['add','📥','Kiritish'],['find','🔍','Qidiruv'],['sold','🧾','Sotildi'],['me','👤','Profil']].filter(t=>canAdd()||t[0]!='add');if(tab=='add'&&!canAdd()&&!(canEdit()&&ED))tab='home';
- app.innerHTML=`<nav>${T.map(t=>`<button class="${tab==t[0]?'on':''}" onclick="go('${t[0]}')"><span>${t[1]}</span>${t[2]}</button>`).join('')}</nav><main><div class="brandbar"><img class="lt" src="logo-h.png?v=11" alt="Mizan"><img class="dk" src="logo-h-dark.png?v=11" alt="Mizan"></div><div class="in" id="v"></div></main>`;
- ({home:homeV,add:addV,find:findV,sold:soldV,me:meV})[tab]();cb()}
+ app.innerHTML=`<nav>${T.map(t=>`<button class="${tab==t[0]?'on':''}" onclick="go('${t[0]}')"><span>${t[1]}</span>${t[2]}</button>`).join('')}</nav><main><div class="brandbar"><img class="lt" src="logo-h.png?v=11" alt="Mizan"><img class="dk" src="logo-h-dark.png?v=11" alt="Mizan"></div>${subBanner()}<div class="in" id="v"></div></main>`;
+ ({home:homeV,add:addV,find:findV,sold:soldV,me:meV})[tab]();cb();subRemind()}
 const go=t=>{PM=false;tab=t;sub=null;ED=null;DR=null;render()};
 function theme(){const r=document.documentElement;r.dataset.theme=r.dataset.theme=='dark'?'light':'dark';try{localStorage.setItem('theme',r.dataset.theme)}catch(e){}render()}
 
@@ -236,7 +237,7 @@ function pic(f,mx,k){if(!f)return;const r=new FileReader();r.onload=()=>{const i
 function delPic(){delete D.set.bg;delete D.set.av;save();bg();close();render()}
 function bg(){const b=document.body.style;if(D.set.bg){b.backgroundImage=`linear-gradient(var(--ov),var(--ov)),url(${D.set.bg})`;b.backgroundSize='cover';b.backgroundAttachment='fixed'}else b.backgroundImage=''}
 /* ===== TILLAR (uz asosiy; ru/en lug'at orqali) ===== */
-const W=[["Uy","Главная","Home"],["Sotuvni bekor qilish","Отменить продажу","Cancel sale"],["Sotuv bekor qilinsinmi? Mahsulotlar omborga qaytariladi, qarz (bo'lsa) o'chiriladi.","Отменить продажу? Товары вернутся на склад, долг (если есть) будет удалён.","Cancel this sale? Items go back to stock and the debt (if any) is removed."],["Sotuv bekor qilindi ✅","Продажа отменена ✅","Sale cancelled ✅"],["o'chirilgan mahsulot omborga qaytmadi","удалённый товар не вернулся на склад","deleted product was not restocked"],["Kiritish","Добавить","Add"],["Qidiruv","Поиск","Search"],["Sotildi","Продано","Sold"],["Profil","Профиль","Profile"],
+const W=[["Tarif / Premium","Тариф / Премиум","Plan / Premium"],["Obuna muddati tugagan","Срок подписки истёк","Subscription expired"],["Davom etish uchun tarifni tanlang. To'lov tasdiqlangach hisob darrov ochiladi, ma'lumotlaringiz saqlangan.","Выберите тариф, чтобы продолжить. После подтверждения оплаты аккаунт откроется сразу, ваши данные сохранены.","Choose a plan to continue. Your account opens right after the payment is confirmed, your data is safe."],["Do'kon obunasi tugagan. Administratorga murojaat qiling, u to'lov qilgach ish davom etadi.","Подписка магазина истекла. Обратитесь к администратору, после оплаты работа продолжится.","The shop subscription has expired. Contact the administrator, work continues after payment."],["Bu raqam ilgari sinov muddatidan foydalangan.","Этот номер уже использовал пробный период.","This number has already used the trial period."],["ta oflayn sotuv saqlangan, to'lovdan keyin yuboriladi.","офлайн-продаж сохранено, они отправятся после оплаты.","offline sales are saved and will be sent after payment."],["Qayta tekshirish","Проверить снова","Check again"],["Yuklanmoqda...","Загрузка...","Loading..."],["Qayta urinish","Повторить","Try again"],["Joriy tarif","Текущий тариф","Current plan"],["Sinov muddati","Пробный период","Trial period"],["Tarif","Тариф","Plan"],["Umrbod tarif","Пожизненный тариф","Lifetime plan"],["Umrbod","Пожизненный","Lifetime"],["Maxsus tarif","Особый тариф","Custom plan"],["kun qoldi","дн. осталось","days left"],["Tugagan:","Истёк:","Expired:"],["Tugaydi:","Истекает:","Expires:"],["Umrbod tarif faol. Qo'shimcha to'lov kerak emas ✅","Пожизненный тариф активен. Доплата не нужна ✅","Lifetime plan is active. No extra payment needed ✅"],["Bu ilovada to'lov qilish mumkin emas.","В этом приложении оплата недоступна.","Payment is not available in this app."],["To'lov tizimi hali sozlanmagan. Administrator bilan bog'laning.","Платёжная система ещё не настроена. Свяжитесь с администратором.","The payment system is not set up yet. Contact the administrator."],["Bir marta to'lov · Qolgan joylar:","Разовый платёж · Осталось мест:","One-time payment · Spots left:"],["To'lash:","Оплатить:","Pay with:"],["To'lovlar tarixi","История платежей","Payment history"],["To'lov kutilmoqda","Ожидание оплаты","Waiting for payment"],["To'lov sahifasida to'lovni yakunlang. To'lov tasdiqlangach bu oyna avtomatik yopiladi.","Завершите оплату на странице оплаты. Окно закроется автоматически после подтверждения.","Complete the payment on the payment page. This window closes automatically once confirmed."],["To'lov sahifasini ochish","Открыть страницу оплаты","Open payment page"],["Tekshirish","Проверить","Check"],["Bekor qilish","Отмена","Cancel"],["To'lov qabul qilindi. Endi kirishingiz mumkin.","Оплата принята. Теперь можно войти.","Payment received. You can now sign in."],["To'lov qabul qilindi","Оплата принята","Payment received"],["Obuna uchun to'lov","Оплата подписки","Subscription payment"],["Admin ID raqamini kiriting. Hisobga kirmasdan ham to'lashingiz mumkin.","Введите ID администратора. Оплатить можно и без входа в аккаунт.","Enter the administrator ID. You can pay without signing in."],["Admin ID raqami","ID администратора","Administrator ID"],["6 xonali ID","6-значный ID","6-digit ID"],["6 xonali ID kiriting","Введите 6-значный ID","Enter a 6-digit ID"],["Davom etish","Продолжить","Continue"],["Do'kon","Магазин","Shop"],["Obuna muddati 1 kundan kam qoldi","Подписка истекает менее чем через 1 день","Less than 1 day of subscription left"],["Obuna muddati 1 kundan kam qoldi.","Подписка истекает менее чем через 1 день.","Less than 1 day of subscription left."],["Obuna tugashiga","До конца подписки","Subscription ends in"],["Uzaytirish","Продлить","Renew"],["Obuna tugayapti","Подписка заканчивается","Subscription is ending"],["Muddat tugagach hisob bloklanadi. Hozir uzaytirsangiz qolgan kunlar yo'qolmaydi.","После окончания срока аккаунт блокируется. Если продлить сейчас, оставшиеся дни не сгорят.","The account is blocked when the term ends. If you renew now, remaining days are not lost."],["Tarifni ko'rish","Посмотреть тарифы","View plans"],["Keyinroq","Позже","Later"],["1 oy","1 месяц","1 month"],["3 oy","3 месяца","3 months"],["Obuna muddati tugagan. Davom etish uchun to'lov qiling","Срок подписки истёк. Оплатите, чтобы продолжить","Subscription expired. Pay to continue"],["Obuna muddati tugagan. Administratorga murojaat qiling","Срок подписки истёк. Обратитесь к администратору","Subscription expired. Contact the administrator"],["Bunday ID topilmadi","Такой ID не найден","ID not found"],["To'lov tizimi hali sozlanmagan","Платёжная система ещё не настроена","The payment system is not set up yet"],["Umrbod tarif tugagan","Пожизненный тариф закончился","The lifetime plan is sold out"],["Sizda umrbod tarif bor, to'lov kerak emas","У вас пожизненный тариф, оплата не нужна","You have a lifetime plan, no payment needed"],["Bu ilovada to'lov mavjud emas","В этом приложении оплата недоступна","Payment is not available in this app"],["To'lov usuli topilmadi","Способ оплаты не найден","Payment method not found"],["Tarif topilmadi","Тариф не найден","Plan not found"],["Sotish narxi","Цена продажи","Selling price"],["Uy","Главная","Home"],["Sotuvni bekor qilish","Отменить продажу","Cancel sale"],["Sotuv bekor qilinsinmi? Mahsulotlar omborga qaytariladi, qarz (bo'lsa) o'chiriladi.","Отменить продажу? Товары вернутся на склад, долг (если есть) будет удалён.","Cancel this sale? Items go back to stock and the debt (if any) is removed."],["Sotuv bekor qilindi ✅","Продажа отменена ✅","Sale cancelled ✅"],["o'chirilgan mahsulot omborga qaytmadi","удалённый товар не вернулся на склад","deleted product was not restocked"],["Kiritish","Добавить","Add"],["Qidiruv","Поиск","Search"],["Sotildi","Продано","Sold"],["Profil","Профиль","Profile"],
 ["SOTUVNI NAZORAT QILISH TIZIMI","СИСТЕМА КОНТРОЛЯ ПРОДАЖ","SALES CONTROL SYSTEM"],["Sotuvni nazorat qilish tizimi","Система контроля продаж","Sales control system"],
 ["Kamchiliklar","Нехватка","Shortages"],["Qarzdorlar","Должники","Debtors"],["Savdo grafigi","График продаж","Sales chart"],["Mahsulot reytingi","Рейтинг товаров","Product ranking"],
 ["Bugungi savdo","Продажи сегодня","Today's sales"],["Bugungi foyda","Прибыль сегодня","Today's profit"],["Ombordagi summa","Сумма на складе","Stock value"],["Jami qarzlar","Всего долгов","Total debts"],["Jami qarz","Всего долг","Total debt"],
@@ -371,6 +372,7 @@ async function api(path,method,body){let r;
  catch(e){const x=new Error("Internet yo'q yoki server javob bermayapti");x.offline=true;throw x}
  let j=null;try{j=await r.json()}catch(e){}
  if(r.status==401&&TOK&&!path.startsWith('/auth/login')){logout(true);throw apiErr('Qaytadan kiring')}
+ if(r.status==402&&j&&j.code=='SUB_EXPIRED'){if(!SUBX&&TOK&&U){SUBX=true;setTimeout(payWall,0)}const x=apiErr(j.error);x.sub=true;throw x}
  if(!r.ok)throw apiErr((j&&j.error)||'Xatolik ('+r.status+')');return j}
 const tryA=async fn=>{try{return await fn()}catch(e){toast(e.message);return null}};
 const isA=()=>!!U&&U.role=='admin',canPrice=()=>!!(D&&D.set&&D.set.canPrice),canEdit=()=>isA()||!!(D&&D.set&&D.set.canEdit),canAdd=()=>isA()||!!(D&&D.set&&D.set.canAdd);
@@ -431,12 +433,12 @@ function sellOffline(body){
 /* Oflayn paytda ham mahsulot qoldig'i yangi bo'lishi uchun nusxani qo'lda yangilaymiz */
 function snapSaveKeep(){if(!U||!D)return;const o=jget('oc:'+U.id);if(o){o.products=D.products;jset('oc:'+U.id,o)}}
 /* Navbatni yuborish (ketma-ket, vaqt tartibida) */
-async function flushQ(){if(FLUSHING||!U||!TOK||navigator.onLine===false)return;
+async function flushQ(){if(FLUSHING||!U||!TOK||SUBX||navigator.onLine===false)return;
  let q=qGet().filter(s=>!s.err);if(!q.length)return;FLUSHING=true;let done=0,warn=[],stop=false;
  try{for(const s of q){if(!U||!TOK)break;
   const body={clientId:s.cid,offline:true,createdAt:s.t,customer:s.customer,credit:s.credit,items:s.items.map(i=>({productId:i.productId,qty:i.qty,seen:i.seen,...(canPrice()?{price:i.price}:{})}))};
   try{const r=await api('/sales','POST',body);done++;if(r&&r.warnings)warn.push(...r.warnings);const cur=qGet().filter(x=>x.cid!=s.cid);qSet(cur)}
-  catch(e){if(e.offline){stop=true;break}
+  catch(e){if(e.offline||e.sub){stop=true;break}
    const cur=qGet(),x=cur.find(y=>y.cid==s.cid);if(x){x.err=e.message;qSet(cur)}}}
  }finally{FLUSHING=false}
  if(done){try{await sync()}catch(e){}OFFLINE=false;if(U&&!$('#md')){tab=='find'?fl():render()}toast(`✅ ${done} ta oflayn sotuv yuborildi`);if(warn.length)setTimeout(()=>{if(U)modal(`<h3>⚠️ Diqqat</h3><p class="mu">Oflayn sotuvlarda e'tibor talab qiladigan holatlar:</p>${warn.slice(0,10).map(w=>`<p>• ${esc(w)}</p>`).join('')}<button class="bt" onclick="this.closest('.modal').remove()">Tushunarli</button>`)},300)}
@@ -475,6 +477,7 @@ async function doResetConfirm(){const er=$('#er'),ph=$('#ph').value,cd=$('#cd').
  try{const r=await api('/auth/reset/confirm','POST',{phone:ph,code:cd,password:pw});loginV(0);$('#ph').value=r.loginId;
   $('#er').insertAdjacentHTML('beforebegin',`<p class="gn" style="font-weight:600">✅ Parol yangilandi. Sizning ID raqamingiz: <b>${esc(r.loginId)}</b></p>`);$('#pw').focus()}catch(e){er.textContent=e.message}}
 async function enter(r){U={id:r.user.id,phone:r.user.phone,role:r.user.role,uname:r.user.name,loginId:r.user.loginId,name:r.shop.name};D={products:[],sales:[],buys:[],debts:[],exp:[],set:{}};C=[];
+ subSet(r.sub);SUBX=false;if(r.sub&&!subLive()){SUBX=true;return payWall()}
  try{await sync()}catch(e){if(e.offline&&snapLoad()){OFFLINE=true}else{loginV(0);setTimeout(()=>{const x=$('#er');x&&(x.textContent=e.message)},0);return}}
  meSave(r);
  let l='';try{l=localStorage.getItem('lang')}catch(e){}setLang(l||D.set.lang||'uz');bg();
@@ -509,7 +512,7 @@ async function doSell(){const debt=$('#xd').checked,nm=$('#xc').value.trim();if(
  const body={customer:nm,items:C.map(c=>({productId:+c.id,qty:c.qty,...(canPrice()?{price:c.price}:{})})),credit:debt?{paidNow:+$('#xa').value||0,phone:$('#xt').value.trim(),due:$('#xu').value}:null};
  body.clientId=newCid();body.createdAt=Date.now();
  if(navigator.onLine===false)return sellOffline(body);
- let r;try{r=await api('/sales','POST',body)}catch(e){if(e.offline)return sellOffline(body);return toast(e.message)}
+ let r;try{r=await api('/sales','POST',body)}catch(e){if(e.offline||e.sub)return sellOffline(body);return toast(e.message)}
  C=[];await tryA(sync);cb();tab=='find'?fl():render();sd(r.id);if(r.warnings&&r.warnings.length)toast('⚠️ '+r.warnings[0])}
 function paySale(id){const d=D.debts.find(x=>x.sid==id);if(d)payM(d.id)}
 
@@ -562,8 +565,8 @@ function meV(){const a=isA(),H=n=>hide?'••••••':fmt(n);let fin='';
  if(a){const cost=D.products.reduce((x,p)=>x+p.cost*p.qty,0),val=D.products.reduce((x,p)=>x+sp(p)*p.qty,0),bought=D.buys.reduce((x,b)=>x+b.amount,0),fy=D.sales.reduce((x,s)=>x+prof(s),0);
   fin=`<div class="bal"><div style="opacity:.8">Ombordagi summa</div><b>${H(cost)} so'm <button onclick="hide=!hide;meV()" style="font-size:22px">${hide?'🙈':'👁'}</button></b><div style="opacity:.8;margin-top:8px;font-size:13px">Sotilsa: ${H(val)} so'm</div></div>
  <div class="stats" style="margin-bottom:14px"><div class="st">Jami olingan tovar<b>${H(bought)}</b></div><div class="st">Olingan sof foyda<b class="gn">${H(fy-D.exp.reduce((x,e)=>x+e.amount,0))}</b></div></div>`}
- const M=a?[['💸','Xarajatlar','expV()'],['👥','Xodimlar','staffV()'],['📜','Faoliyat tarixi','auditV()'],['📊','Excelga yuklash','csvV()'],['🛡','Xavfsizlik','secV()'],['⚙️','Sozlamalar','setV()'],['ℹ️','Ilova haqida','aboutV()']]:[['🛡','Xavfsizlik','secV()'],['⚙️','Sozlamalar','setV()'],['ℹ️','Ilova haqida','aboutV()']];
- V(`<div class="top">${av()}<div><b class="nm">${esc(U.name)}</b><div class="sb">${esc(U.uname)} · ${a?'ADMIN':'SOTUVCHI'}</div><div class="sb">ID: ${esc(U.loginId||'')}</div></div></div>${fin}
+ const M=a?[['💎','Tarif / Premium','planV()'],['💸','Xarajatlar','expV()'],['👥','Xodimlar','staffV()'],['📜','Faoliyat tarixi','auditV()'],['📊','Excelga yuklash','csvV()'],['🛡','Xavfsizlik','secV()'],['⚙️','Sozlamalar','setV()'],['ℹ️','Ilova haqida','aboutV()']]:[['🛡','Xavfsizlik','secV()'],['⚙️','Sozlamalar','setV()'],['ℹ️','Ilova haqida','aboutV()']];
+ V(`<div class="top">${av()}<div><b class="nm">${esc(U.name)}</b><div class="sb">${esc(U.uname)} · ${a?'ADMIN':'SOTUVCHI'}</div><div class="sb">ID: ${esc(U.loginId||'')}</div>${a&&SUB?`<div class="sb">💎 ${subLine(SUB)}</div>`:''}</div></div>${fin}
  ${M.map(m=>`<button class="card mi" onclick="PM=true;${m[2]}"><i>${m[0]}</i><b>${m[1]}</b><span class="mu">›</span></button>`).join('')}
  <button class="rd" style="display:block;margin:18px auto;font-weight:700" onclick="logout()">⎋ Chiqish</button>`)}
 function secV(){const a=isA();modal(`<h3>Xavfsizlik</h3>
@@ -682,6 +685,72 @@ const XT={ru:{},en:{}};XWD.forEach(w=>{XT.ru[w[0]]=w[1];XT.en[w[0]]=w[2]});
 const xt=k=>LG=='uz'?k:((XT[LG]||{})[k]||k);
 
 /* ===== ISHGA TUSHIRISH ===== */
+/* ===== OBUNA / TARIF (pullik tizim) =====
+   Obuna holatini SERVER hisoblaydi (qurilma soati hisobga olinmaydi). Bu yerda faqat ko'rsatamiz va oflayn holatda soat orqaga surilganini sezamiz. */
+const PLAT=(()=>{try{return(window.Capacitor&&Capacitor.getPlatform&&Capacitor.getPlatform())||'web'}catch(e){return 'web'}})();
+let SUB=null,SUBX=false,PAYW=null,PUBID='',SUBT=0;
+const subSet=s=>{SUB=s||null;if(SUB&&!SUB.localAt)SUB.localAt=Date.now();return SUB};
+/* Obuna amalda ishlayaptimi? Oflayn bo'lsa: oxirgi server vaqti + o'tgan vaqt; soat orqaga surilgan bo'lsa ishonchsiz */
+function subLive(s){s=s||SUB;if(!s)return true;if(s.lifetime)return true;const el=Date.now()-(s.localAt||Date.now());if(el<-60000)return false;return s.serverTime+Math.max(el,0)<s.until}
+const PN={trial:'Sinov muddati',life:'Umrbod',manual:'Maxsus tarif'};
+const planName=(c,pl)=>{const p=(pl||[]).find(x=>x.code==c);return p?p.name:(PN[c]||c)};
+function subLine(s){if(!s)return '';if(s.lifetime)return 'Umrbod tarif ♾';if(s.state=='expired')return 'Obuna muddati tugagan';return (s.state=='trial'?'Sinov muddati':'Tarif')+': '+s.daysLeft+' kun qoldi'}
+function subBanner(){if(!isA()||!SUB||SUB.lifetime||!SUB.remind||SUBX)return '';return `<button class="sbn${SUB.remind==1?' hot':''}" onclick="PM=true;planV()">⏳ ${SUB.remind==1?'Obuna muddati 1 kundan kam qoldi':'Obuna tugashiga '+SUB.daysLeft+' kun qoldi'} · Uzaytirish</button>`}
+function bannerApply(){const o=document.querySelector('.sbn');if(o)o.remove();const h=subBanner(),v=$('#v');if(h&&v)v.insertAdjacentHTML('beforebegin',h)}
+/* Tugashiga 5 va 1 kun qolganda bir martalik eslatma oynasi (kuniga bir marta) */
+function subRemind(){if(!U||!isA()||!SUB||SUB.lifetime||!SUB.remind||SUBX)return;const k='sr:'+U.id,day=new Date().toDateString()+':'+SUB.remind;let l='';try{l=localStorage.getItem(k)}catch(e){}if(l==day)return;try{localStorage.setItem(k,day)}catch(e){}
+ setTimeout(()=>{if(!U||SUBX||$('#md'))return;modal(`<h3>⏳ Obuna tugayapti</h3><p>${SUB.remind==1?'Obuna muddati 1 kundan kam qoldi.':'Obuna tugashiga '+SUB.daysLeft+' kun qoldi.'}</p><p class="mu" style="font-size:13px">Muddat tugagach hisob bloklanadi. Hozir uzaytirsangiz qolgan kunlar yo'qolmaydi.</p><button class="bt" onclick="close();PM=true;planV()">Tarifni ko'rish</button><button class="g" style="width:100%;margin-top:8px" onclick="close()">Keyinroq</button>`)},700)}
+/* Vaqti-vaqti bilan serverdan holatni yangilash: muddat tugasa darrov to'lov oynasi, eslatma paydo bo'lsa banner */
+async function subRefresh(force){if(!U||!TOK||SUBX||OFFLINE||navigator.onLine===false)return;if(!force&&Date.now()-SUBT<60000)return;SUBT=Date.now();
+ try{const was=SUB&&SUB.remind,d=await api('/billing/status');subSet(d.sub);if(!subLive()){SUBX=true;payWall();return}if(SUB.remind!=was){bannerApply();subRemind()}}catch(e){}}
+setInterval(()=>subRefresh(true),10*60*1000);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden){subRefresh();payCheck()}});
+
+/* --- Tariflar ro'yxati (profil, bloklangan oyna va login oynasi uchun umumiy) --- */
+function plansHtml(d,pub){const s=d.sub||{};
+ let h=`<div class="card" style="text-align:center"><div class="mu">Joriy tarif</div><b style="font-size:19px">${s.lifetime?'Umrbod ♾':esc(s.state=='expired'?'Obuna muddati tugagan':planName(s.plan,d.plans))}</b>${s.until?`<div class="mu" style="font-size:13px">${s.state=='expired'?'Tugagan: ':'Tugaydi: '}${dt(s.until)}</div>`:''}${s.state=='trial'||s.state=='active'?`<div class="mu" style="font-size:13px">${s.daysLeft} kun qoldi</div>`:''}</div>`;
+ if(s.lifetime)return h+`<p class="mu" style="text-align:center">Umrbod tarif faol. Qo'shimcha to'lov kerak emas ✅</p>`;
+ if(d.hidden)return h+`<p class="mu" style="text-align:center">Bu ilovada to'lov qilish mumkin emas.</p>`;
+ if(d.notConfigured)h+=`<p class="rd">To'lov tizimi hali sozlanmagan. Administrator bilan bog'laning.</p>`;
+ return h+(d.plans||[]).map(p=>`<div class="card plan"><div class="sp"><div><b>${esc(p.name)}</b><div class="mu" style="font-size:12px">${p.kind=='lifetime'?'Bir marta to\'lov · Qolgan joylar: '+p.left:p.days+' kun'}</div></div><b class="pc">${fmt(p.price)} so'm</b></div>${d.canPay?`<div class="row">${d.providers.map(v=>`<button class="${v.id=='payme'?'bt':'g'}" onclick="payGo('${esc(p.code)}','${v.id}',${pub?1:0})">To'lash: ${esc(v.name)}</button>`).join('')}</div>`:''}</div>`).join('')}
+async function loadPlansInto(sel,hist){const el=$(sel);if(!el)return;
+ try{const d=await api('/billing/plans?platform='+PLAT);subSet(d.sub);if(!$(sel))return;let h=plansHtml(d,false);
+  if(hist){try{const o=(await api('/billing/history')).orders;if(o.length)h+=`<h4 style="margin:16px 0 6px">To'lovlar tarixi</h4>`+o.slice(0,5).map(x=>`<div class="sp mu" style="font-size:13px;margin:4px 0"><span>${dt(x.paidAt)} · ${esc(planName(x.plan,d.plans))}</span><b>${x.amount?fmt(x.amount)+" so'm":'—'}</b></div>`).join('')}catch(e){}}
+  if($(sel))$(sel).innerHTML=h}
+ catch(e){if($(sel))$(sel).innerHTML=`<p class="rd">${esc(e.message)}</p><button class="g" style="width:100%" onclick="loadPlansInto('${sel}',${hist?1:0})">Qayta urinish</button>`}}
+function planV(){modal(`<h3>💎 Tarif / Premium</h3><div id="plb"><p class="mu">Yuklanmoqda...</p></div>`);loadPlansInto('#plb',true)}
+
+/* --- To'lov: Payme / Click sahifasini ochish va natijani kutish --- */
+function openUrl(u){try{const B=window.Capacitor&&Capacitor.Plugins&&Capacitor.Plugins.Browser;if(B&&B.open){B.open({url:u});return}}catch(e){}try{window.open(u,'_blank','noopener')}catch(e){}}
+async function payGo(code,prov,pub){const body={plan:code,provider:prov,lang:LG};if(pub)body.id=PUBID;
+ try{const r=await api((pub?'/billing/public/checkout':'/billing/checkout')+'?platform='+PLAT,'POST',body);openUrl(r.url);payWait(r.orderId,pub,r.url)}catch(e){toast(e.message)}}
+function payWait(id,pub,u){payStop();modal(`<h3>⏳ To'lov kutilmoqda</h3><p class="mu" style="font-size:13px">To'lov sahifasida to'lovni yakunlang. To'lov tasdiqlangach bu oyna avtomatik yopiladi.</p><a class="bt" style="display:block;text-align:center;text-decoration:none" href="${esc(u)}" target="_blank" rel="noopener">To'lov sahifasini ochish</a><button class="g" style="width:100%;margin-top:8px" onclick="payCheck()">Tekshirish</button><button class="g" style="width:100%;margin-top:8px" onclick="payStop();close()">Bekor qilish</button>`);
+ PAYW={id,pub,n:0,t:setInterval(payCheck,3000)}}
+function payStop(){if(PAYW){clearInterval(PAYW.t);PAYW=null}}
+async function payCheck(){const w=PAYW;if(!w)return;if(!w.pub&&!U)return payStop();if(++w.n>400)return payStop();
+ try{const r=await api(w.pub?'/billing/public/order/'+w.id:'/billing/order/'+w.id);if(r.paid&&PAYW===w){payStop();payDone(w.pub)}}catch(e){}}
+async function payDone(pub){close();toast("✅ To'lov qabul qilindi");
+ if(pub){loginV(0);setTimeout(()=>{const x=$('#er');x&&x.insertAdjacentHTML('beforebegin',`<p class="gn" style="font-weight:600">✅ To'lov qabul qilindi. Endi kirishingiz mumkin.</p>`)},0);return}
+ try{const me=await api('/auth/me');if(SUBX){SUBX=false;await enter(me)}else{subSet(me.sub);bannerApply();if(tab=='me')meV()}}catch(e){}}
+async function subRetry(){try{const me=await api('/auth/me');await enter(me)}catch(e){toast(e.message)}}
+
+/* --- Obuna tugagan: to'lov oynasi (ma'lumotlar yopiq, lekin login va to'lov ochiq) --- */
+function payWall(){SUBX=true;payStop();close();if(SUB){SUB.ok=false;SUB.state='expired'}
+ const a=isA(),n=typeof qGet=='function'?qGet().length:0;
+ app.innerHTML=`<div class="lg"><img class="lm lt" src="logo-login.png?v=11" alt="Mizan"><img class="lm dk" src="logo-login-dark.png?v=11" alt="Mizan"><div class="card" style="margin-top:14px"><h3 style="margin:0 0 6px">⏰ Obuna muddati tugagan</h3>
+ ${a?`<p class="mu" style="font-size:13px">Davom etish uchun tarifni tanlang. To'lov tasdiqlangach hisob darrov ochiladi, ma'lumotlaringiz saqlangan.</p>`:`<p class="mu" style="font-size:13px">Do'kon obunasi tugagan. Administratorga murojaat qiling, u to'lov qilgach ish davom etadi.</p>`}
+ ${SUB&&SUB.noTrial?`<p class="rd" style="font-size:13px">Bu raqam ilgari sinov muddatidan foydalangan.</p>`:''}
+ ${n?`<p class="mu" style="font-size:13px">📦 ${n} ta oflayn sotuv saqlangan, to'lovdan keyin yuboriladi.</p>`:''}
+ <div id="plb">${a?'<p class="mu">Yuklanmoqda...</p>':''}</div></div>
+ <button class="g" style="width:100%;margin-top:8px" onclick="subRetry()">Qayta tekshirish</button><button class="g" style="width:100%;margin-top:8px" onclick="logout()">Chiqish</button></div>`;
+ if(a)loadPlansInto('#plb',false)}
+
+/* --- Login oynasidan: ID bo'yicha to'lash (hisobga kirmasdan) --- */
+function payIdV(){modal(`<h3>💳 Obuna uchun to'lov</h3><p class="mu" style="font-size:13px">Admin ID raqamini kiriting. Hisobga kirmasdan ham to'lashingiz mumkin.</p><label>Admin ID raqami</label><input id="pid" inputmode="numeric" maxlength="6" placeholder="6 xonali ID"><p id="er2" class="rd"></p><button class="bt" onclick="payIdGo()">Davom etish</button><div id="plb" style="margin-top:10px"></div>`)}
+async function payIdGo(){const er=$('#er2');er.textContent='';const id=$('#pid').value.replace(/\D/g,'');if(id.length!=6)return er.textContent='6 xonali ID kiriting';
+ try{const d=await api('/billing/public/lookup?platform='+PLAT,'POST',{id});PUBID=id;$('#plb').innerHTML=`<div class="card" style="text-align:center"><div class="mu">Do'kon</div><b>${esc(d.name)}</b></div>`+plansHtml({sub:d.sub,plans:d.plans,canPay:d.canPay,providers:d.providers,hidden:d.hidden,notConfigured:d.notConfigured},true)}catch(e){er.textContent=e.message}}
+(function(){try{const p=new URLSearchParams(location.search);if(p.has('paid'))history.replaceState(null,'',location.pathname)}catch(e){}})();
+
 (async()=>{try{setLang(localStorage.getItem('lang')||'uz')}catch(e){}
  TOK=tokGet();if(!TOK)return loginV(0);
  try{let me;try{me=await api('/auth/me')}catch(e){me=e.offline?meLoad():null;if(!me){if(e.offline)setTimeout(()=>toast(e.message),50);throw e}OFFLINE=true}

@@ -1,6 +1,6 @@
 const crypto = require('crypto');
 class ApiError extends Error {
-  constructor(status, message) { super(message); this.status = status; }
+  constructor(status, message, code) { super(message); this.status = status; if (code) this.code = code; }
 }
 const h = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 const num = (v, { min = -Infinity, max = 1e15, def } = {}) => {
